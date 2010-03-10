@@ -1,0 +1,79 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+use autodie;
+
+my %OP_GROUP = (
+    push    => 'arrays',
+    pop     => 'arrays',
+    unshift => 'arrays',
+    shift   => 'arrays',
+    splice  => 'arrays',
+    aslice  => 'arrays',
+    aassign => 'arrays',
+    aelem   => 'arrays',
+);
+
+my %results = (
+    ops => {},
+    op_patterns => {},
+    contexts => {},
+);
+
+open my $fh, '<:utf8', 'ppap.out';
+while ( my $str = <$fh> ) {
+    chomp($str);
+    unless ( $str =~ /^([-\$\@])(=?)\s(\w+)\s+(.*)$/ ) {
+        die "String '$str' is not parsable";
+    }
+
+    my ($ctx,$lval,$op,$args) = ($1, $2, $3, $4);
+    $results{ops}{$op}++;
+    $results{context}{$op}{$ctx}++;
+    $results{lvalue}{$op}++ if $lval;
+}
+close $fh;
+
+report();
+exit 0;
+
+sub report {
+    open my $fh, '>:utf8', 'ppap/index.html';
+    out_head($fh);
+    out_groups_stats($fh, \%results);
+    out_footer($fh);
+}
+
+sub out_groups_stats {
+    my ($out, $results) = (@_);
+    my $total = 0;
+    my %grps = ();
+    while ( my ($op, $count) = each %{ $results->{'ops'} } ) {
+        $grps{ $OP_GROUP{$op} || 'other' } += $count;
+        $total += $count;
+    }
+    print $out "<table>\n<tr><th>Group</th><th>Count</th><th>%</th></tr>\n";
+    foreach my $group ( sort { $grps{$b} <=> $grps{$a} } keys %grps ) {
+        printf
+            $out
+            "<tr><td>%s</td><td>%d</td><th>%02f</td></tr>",
+            $group, $grps{$group}, $grps{$group}/$total
+        ;
+    }
+    print $out "</table>\n";
+}
+
+sub out_head {
+    my $out = shift;
+    print $out '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"'
+        .' "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">'. "\n";
+    print $out "<html>\n<head><title>PP op codes access patterns</title></head>\n";
+    print $out "<body>";
+}
+
+sub out_footer {
+    my $out = shift;
+    print $out "</body></html>\n";
+}
+
