@@ -52,7 +52,7 @@ describe_array(pTHX_ const AV* const av) {
     prefix = AvARRAY(av) - AvALLOC(av);
     sufix = AvMAX(av) - size;
 
-    fprintf(out, "@%"IVdf"-%"IVdf"-%"IVdf, (IV)prefix, (IV)size+1, (IV)sufix);
+    fprintf(out, "@(0x%"UVxf")%"IVdf"-%"IVdf"-%"IVdf, PTR2UV(av), (IV)prefix, (IV)size+1, (IV)sufix);
 }
 
 static OP *
