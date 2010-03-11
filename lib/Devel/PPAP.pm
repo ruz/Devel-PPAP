@@ -74,6 +74,10 @@ Thanks to authors and contributors of L<Devel::NYTProf> for
 great pile of wisdom on overriding pp_* functions and other
 staffs I hope to borrow from them :)
 
+=head1 REPOSITORY
+
+http://github.com/ruz/Devel-PPAP
+
 =head1 AUTHOR
 
 Ruslan Zakirov E<lt>ruz@bestpractical.comE<gt>

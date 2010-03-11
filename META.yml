@@ -1,13 +1,14 @@
 ---
-abstract: ~
-author: ~
+abstract: 'Push/Pop functions access patterns tracer'
+author:
+  - 'Ruslan Zakirov <ruz@bestpractical.com>'
 build_requires:
   ExtUtils::MakeMaker: 6.42
 configure_requires:
   ExtUtils::MakeMaker: 6.42
 distribution_type: module
 generated_by: 'Module::Install version 0.94'
-license: unknown
+license: perl
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
   version: 1.4
@@ -17,5 +18,10 @@ no_index:
   directory:
     - inc
 requires:
+  File::Spec: 0
+  XSLoader: 0
+  autodie: 0
   perl: 5.8.8
+resources:
+  license: http://dev.perl.org/licenses/
 version: 0.01
