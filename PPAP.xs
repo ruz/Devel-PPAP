@@ -161,6 +161,20 @@ pp_stmt_handle_aelemfast(pTHX)
     return run_original_op(PL_op->op_type);
 }
 
+static OP *
+pp_stmt_handle_sassign(pTHX)
+{
+    dSP; sMARK;
+
+    fprintf(out, "%s", cur_op_context());
+    if ( PL_op->op_flags & OPf_MOD ) {
+        fprintf(out, "=");
+    }
+    fprintf(out, " sassign\n");
+
+    return run_original_op(PL_op->op_type);
+}
+
 static int
 init_handler(pTHX)
 {
@@ -176,6 +190,9 @@ init_handler(pTHX)
     PL_ppaddr[OP_UNSHIFT]    = pp_stmt_handle_unshift;
 
     PL_ppaddr[OP_SPLICE]     = pp_stmt_handle_splice;
+
+// leave it alone now, too much noise for nothing
+//    PL_ppaddr[OP_SASSIGN]    = pp_stmt_handle_sassign;
 
     out = open_report_file();
 }
