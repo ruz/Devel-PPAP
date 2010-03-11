@@ -37,7 +37,7 @@ cur_op_context()
 }
 
 void
-describe_array(const AV* const av) {
+describe_array(pTHX_ const AV* const av) {
     I32 prefix, size, sufix;
 
     if ( SvTIED_mg((const SV *)av, PERL_MAGIC_tied) ) {
@@ -61,7 +61,7 @@ pp_stmt_handle_push(pTHX)
     dSP; sMARK;
 
     fprintf(out, "%s push ", cur_op_context());
-    describe_array( (AV *)(*(MARK+1)) );
+    describe_array(aTHX_ (AV *)(*(MARK+1)) );
     fprintf(out, ", ...%"IVdf"\n", SP-MARK-1);
 
     return run_original_op(PL_op->op_type);
@@ -70,16 +70,14 @@ pp_stmt_handle_push(pTHX)
 static OP *
 pp_stmt_handle_shift(pTHX)
 {
-    dSP; dMARK;
+    dSP; sMARK;
 
     if ( PL_op->op_type == OP_SHIFT ) {
         fprintf(out, "%s shift ", cur_op_context());
     } else {
         fprintf(out, "%s pop ", cur_op_context());
     }
-    if ( SP-MARK > 1 ) { /* XXX: handle shift @_ */
-        describe_array( (AV *)(*(MARK+1)) );
-    }
+    describe_array(aTHX_ (AV *)(TOPs) );
     fprintf(out, "\n");
 
     return run_original_op(PL_op->op_type);
@@ -91,8 +89,8 @@ pp_stmt_handle_unshift(pTHX)
     dSP; sMARK;
 
     fprintf(out, "%s unshift ", cur_op_context());
-    describe_array( (AV *)(*(MARK+1)) );
-    fprintf(out, ", ...%"IVdf"\n", SP-MARK-1);
+    describe_array(aTHX_ (AV*)*(MARK+1) );
+    fprintf(out, ", ...%"IVdf"\n", (IV)(SP-MARK-1));
 
     return run_original_op(PL_op->op_type);
 }
@@ -104,7 +102,7 @@ pp_stmt_handle_splice(pTHX)
     I32 nargs = SP-MARK-1;
 
     fprintf(out, "%s splice ", cur_op_context());
-    describe_array( (AV *)(*(MARK+1)) );
+    describe_array(aTHX_ (AV *)(*(MARK+1)) );
 
     if ( nargs-- > 0 ) {
         fprintf(out, ", %"IVdf, SvIV(*(SP-nargs)));
@@ -131,8 +129,11 @@ pp_stmt_handle_aelem(pTHX)
     }
     fprintf(out, " aelem ");
 
-    describe_array( (AV *)(*(MARK+1)) );
-    fprintf(out, ", %"IVdf"\n", SvIV((SV *)(*(MARK+1))));
+    if ( SP-MARK > 1 ) { /* XXX: handle shift @_ */
+        describe_array(aTHX_ (AV *)TOPm1s );
+        fprintf(out, ", %"IVdf, (IV)SvIV(TOPs));
+    }
+    fprintf(out, "\n");
 
     return run_original_op(PL_op->op_type);
 }
@@ -149,10 +150,10 @@ pp_stmt_handle_aelemfast(pTHX)
     fprintf(out, " aelemfast ");
 
     if ( PL_op->op_flags & OPf_SPECIAL ) {
-        describe_array( PAD_SV(PL_op->op_targ) );
+        describe_array(aTHX_ PAD_SV(PL_op->op_targ) );
     } else {
-        // XXX: how safe to do this?
-        describe_array( GvAV(cGVOP_gv) );
+        // XXX: how safe is this?
+        describe_array(aTHX_ GvAV(cGVOP_gv) );
     }
 
     fprintf(out, ", %"IVdf"\n", (IV) PL_op->op_private);
