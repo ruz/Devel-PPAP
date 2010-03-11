@@ -3,6 +3,7 @@
 use strict;
 use warnings;
 use autodie;
+use File::Spec;
 
 my %OP_GROUP = (
     push    => 'arrays',
@@ -21,28 +22,40 @@ my %results = (
     contexts => {},
 );
 
-open my $fh, '<:utf8', 'ppap.out';
-while ( my $str = <$fh> ) {
-    chomp($str);
-    unless ( $str =~ /^([-\$\@])(=?)\s(\w+)\s+(.*)$/ ) {
-        die "String '$str' is not parsable";
-    }
-
-    my ($ctx,$lval,$op,$args) = ($1, $2, $3, $4);
+walk_report( sub {
+    my ($ctx,$lval,$op,$args) = @_;
     $results{ops}{$op}++;
     $results{context}{$op}{$ctx}++;
     $results{lvalue}{$op}++ if $lval;
-}
-close $fh;
+} );
 
 report();
 exit 0;
 
 sub report {
-    open my $fh, '>:utf8', 'ppap/index.html';
-    out_head($fh);
+    my $fh = new_file('index.html');
+    out_head($fh, 'PP op codes access patterns');
     out_groups_stats($fh, \%results);
+    out_pp_usage($fh, \%results);
+    out_context($fh, $results{'context'});
+    out_variable_arguments($fh);
+    out_arrays_arguments($fh);
     out_footer($fh);
+    close $fh;
+}
+
+sub walk_report {
+    my $cb = shift;
+    open my $fh, '<:utf8', 'ppap.out';
+    while ( my $str = <$fh> ) {
+        chomp($str);
+        unless ( $str =~ /^([-\$\@])(=?)\s(\w+)\s*(.*)$/ ) {
+            die "String '$str' is not parsable";
+        }
+
+        $cb->($1, $2, $3, $4);
+    }
+    close $fh;
 }
 
 sub out_groups_stats {
@@ -53,27 +66,277 @@ sub out_groups_stats {
         $grps{ $OP_GROUP{$op} || 'other' } += $count;
         $total += $count;
     }
+
+    print $out "<h1>Groupped OPs</h1>\n";
     print $out "<table>\n<tr><th>Group</th><th>Count</th><th>%</th></tr>\n";
     foreach my $group ( sort { $grps{$b} <=> $grps{$a} } keys %grps ) {
         printf
             $out
-            "<tr><td>%s</td><td>%d</td><th>%02f</td></tr>",
-            $group, $grps{$group}, $grps{$group}/$total
+            "<tr><td>%s</td><td>%d</td><th>%0.2f</td></tr>",
+            $group, $grps{$group}, (100*$grps{$group})/$total
         ;
     }
     print $out "</table>\n";
 }
 
+sub out_pp_usage {
+    my ($out, $results) = (@_);
+    my $total = 0;
+    $total += $_ foreach values %{ $results->{'ops'} };
+
+    print $out "<h1>PPs usage</h1>\n";
+    print $out "<table>\n<tr><th>PP</th><th>Count</th><th>%</th></tr>\n";
+    foreach my $op (
+        sort { $results->{'ops'}{$b} <=> $results->{'ops'}{$a} }
+        keys %{ $results->{'ops'} }
+    ) {
+        printf
+            $out
+            "<tr><td>%s</td><td>%d</td><th>%0.2f</td></tr>",
+            $op, $results->{'ops'}{$op}, (100*$results->{'ops'}{$op})/$total
+        ;
+    }
+    print $out "</table>\n";
+}
+
+sub out_context {
+    my ($out, $results) = (@_);
+    my %total = ();
+
+    my $res = '';
+
+    $res .= "<h1>Context</h1>\n";
+    $res .= "<table>\n<tr><th>&nbsp;</th><th>void</th><th>scalar</th><th>array</th></tr>\n";
+
+    foreach my $op ( sort { $a cmp $b } keys %$results ) {
+        my $total = 0;
+        $total += $_ foreach values %{ $results->{$op} };
+        $total{$_} += $results->{$op}{$_} || 0 foreach qw(- $ @);
+        
+        $res .= "<tr><th>$op</th>";
+        foreach my $ctx ( qw(- $ @) ) {
+            my $value = $results->{$op}{$ctx};
+            $res .= $value
+                ? sprintf("<td>%d<sup>%0.2f%%</sup></td>", $value, (100*$value)/$total )
+                : "<td>-</td>"
+            ;
+        }
+        $res .= "</tr>\n";
+    }
+
+    my $total = 0;
+    $total += $_ foreach values %total;
+    $res .= "<tr><th>Total:</th>";
+    foreach my $ctx ( qw(- $ @) ) {
+        $res .= $total{$ctx}
+            ? sprintf(
+                "<td>%d<sup>%0.2f%%</sup></td>",
+                $total{$ctx}, (100*$total{$ctx})/$total
+            )
+            : "<td>-</td>"
+        ;
+    }
+    $res .= "</tr>\n";
+    $res .= "</table>\n";
+
+    print $out $res;
+}
+
+sub out_variable_arguments {
+    my $out = shift;
+
+    my %stats;
+    my %total_per_op;
+    my %total_per_len;
+
+    print $out "<h1>Varying arguments</h1>\n";
+    walk_report( sub {
+        my ($ctx,$lval,$op,$args) = @_;
+        return unless rindex($args, '...') >= 0;
+        my ($l) = ($args =~ /\.\.\.([0-9]+)/);
+        $stats{$op}{$l}++;
+        $total_per_len{$l}++;
+        $total_per_op{$op}++;
+    } );
+
+    my $show_first = 5;
+
+    my $res = '';
+    $res .= "<h2>Most used lengths</h2>\n";
+    $res .= "<table>\n<tr><th>PP</th>". join( '', map "<th>$_</th>", 1 .. $show_first ) ."</tr>\n";
+    foreach my $op ( sort keys %stats ) {
+        $res .= "<tr><th>$op</th>";
+        my $found = 0;
+        foreach my $len (
+            sort { $stats{$op}{$b} <=> $stats{$op}{$a} }
+            keys %{ $stats{$op} }
+        ) {
+            $found++;
+
+            $res .= sprintf
+                "<td>%d <sup>%0.2f%%</sup></td>",
+                $len, (100*$stats{$op}{$len})/$total_per_op{$op},
+            ;
+
+            last if $found == $show_first;
+        }
+        $res .= join '', map "<td>-</td>", 1 .. $show_first-$found
+            if $found < $show_first;
+        $res .= "</tr>\n";
+    }
+    {
+        my $total = 0;
+        $total += $_ foreach values %total_per_len;
+
+        $res .= "<tr><th>Total:</th>";
+        my $found = 0;
+        foreach my $len (
+            sort { $total_per_len{$b} <=> $total_per_len{$a} }
+            keys %total_per_len
+        ) {
+            $found++;
+
+            $res .= sprintf
+                "<td>%d <sup>%0.2f%%</sup></td>",
+                $len, (100*$total_per_len{$len})/$total,
+            ;
+
+            last if $found == $show_first;
+        }
+        $res .= join '', map "<td>-</td>", 1 .. $show_first-$found
+            if $found < $show_first;
+        $res .= "</tr>\n";
+
+    }
+    $res .= "</table>\n";
+    print $out $res;
+    $res = '';
+
+    
+    my @fractiles = fractiles();
+    $res .= "<h2>Fractiles</h2>\n";
+    $res .= "<table>\n<tr><th>PP</th>". join( '', map "<th>$_%</th>", @fractiles ) ."</tr>\n";
+    foreach my $op ( sort keys %stats ) {
+        my $fractiles = calc_fractiles( $stats{$op}, $total_per_op{$op} );
+        $res .= "<tr><th>$op</th>";
+        foreach my $f ( @fractiles ) {
+            $res .= exists $fractiles->{ $f }
+                ? sprintf("<td>%0d</td>", $fractiles->{ $f })
+                : "<td>-</td>"
+            ;
+        }
+        $res .= "</tr>\n";
+    }
+    $res .= "</table>\n";
+    print $out $res;
+    $res = '';
+}
+
+sub out_arrays_arguments {
+    my $out = shift;
+
+    my %stats;
+    my %total_per_len;
+
+    print $out "<h1>Array arguments</h1>\n";
+
+    walk_report( sub {
+        my ($ctx,$lval,$op,$args) = @_;
+        return unless rindex($args, '@(') >= 0;
+        my ($prefix, $length, $sufix) = ($args =~ /@\([^\)]+\)([0-9]+)-([0-9]+)-([0-9]+)/);
+        $stats{$op}{'prefix'}{$prefix}++;
+        $stats{$op}{'length'}{$length}++;
+        $stats{$op}{'sufix'}{$sufix}++;
+        $total_per_len{'prefix'}{$prefix}++;
+        $total_per_len{'length'}{$length}++;
+        $total_per_len{'sufix'}{$sufix}++;
+    } );
+
+    my $res = '';
+
+    my @fractiles = fractiles();
+    $res .= "<h2>Fractiles</h2>\n";
+    $res .= "<table>\n<tr><th>PP</th><th></th>". join( '', map "<th>$_%</th>", @fractiles ) ."</tr>\n";
+    foreach my $op ( sort keys %stats ) {
+        $res .= "<tr><th rowspan='3'>$op</th>";
+        foreach my $e ( qw(prefix length sufix) ) {
+            $res .= "<tr>" if $e ne 'prefix';
+            my $fractiles = calc_fractiles( $stats{$op}{$e} );
+            $res .= "<th>$e</th>";
+            foreach my $f ( @fractiles ) {
+                $res .= exists $fractiles->{ $f }
+                    ? sprintf("<td>%0d</td>", $fractiles->{ $f })
+                    : "<td>-</td>"
+                ;
+            }
+            $res .= "</tr>\n";
+        }
+    }
+    $res .= "</table>\n";
+    print $out $res;
+    $res = '';
+}
+
+sub fractiles {
+    return (100, 99, 98, 97, 96, 95, 90, 80, 70, 60, 50, 30, 10);
+}
+
+sub max(@) {
+    my $res = 0;
+    $res < $_ and $res = $_
+        foreach @_;
+    return $res;
+}
+
+sub calc_fractiles {
+    my $data = shift;
+    my $total = shift || 0;
+    unless ( $total ) {
+        $total += $_ foreach values %$data;
+    }
+
+    my %copy = %$data;
+    use Data::Dumper;
+
+    my @fractiles = fractiles();
+
+    my %res;
+
+    my $sum = 100; my $max = max keys %copy;
+    foreach my $v ( sort { $copy{$a} <=> $copy{$b} } keys %copy ) {
+        my $portion = (100*$copy{ $v })/$total;
+        if ( ($sum - $portion) < $fractiles[0] ) {
+            while ( @fractiles && $sum <= $fractiles[0] ) {
+                $res{ shift @fractiles } = $max;
+            }
+            last unless @fractiles;
+        }
+        $sum -= $portion;
+        delete $copy{ $v };
+        $max = max keys %copy
+            if $max == $v;
+    }
+
+    return \%res;
+}
+
 sub out_head {
     my $out = shift;
+    my $title = shift;
     print $out '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"'
         .' "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">'. "\n";
-    print $out "<html>\n<head><title>PP op codes access patterns</title></head>\n";
+    print $out "<html>\n<head><title>$title</title></head>\n";
     print $out "<body>";
 }
 
 sub out_footer {
     my $out = shift;
     print $out "</body></html>\n";
+}
+
+sub new_file {
+    my $name = shift;
+    open my $fh, '>:utf8', File::Spec->catfile('ppap', $name );
+    return $fh;
 }
 
