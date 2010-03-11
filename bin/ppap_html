@@ -50,7 +50,7 @@ sub walk_report {
     while ( my $str = <$fh> ) {
         chomp($str);
         unless ( $str =~ /^([-\$\@])(=?)\s(\w+)\s*(.*)$/ ) {
-            die "String '$str' is not parsable";
+            warn "String '$str' is not parsable";
         }
 
         $cb->($1, $2, $3, $4);
