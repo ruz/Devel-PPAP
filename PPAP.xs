@@ -5,6 +5,8 @@
 typedef OP * (CPERLscope(*orig_ppaddr_t))(pTHX);
 orig_ppaddr_t *PL_ppaddr_orig;
 #define run_original_op(type) CALL_FPTR(PL_ppaddr_orig[type])(aTHX)
+/* sMARK like dMARK, but doesn't change anything */
+#define sMARK register SV **mark = PL_stack_base + TOPMARK
 
 FILE* out;
 
@@ -52,7 +54,7 @@ describe_array(const AV* const av) {
 static OP *
 pp_stmt_handle_push(pTHX)
 {
-    dSP; dMARK;
+    dSP; sMARK;
 
     fprintf(out, "%s push ", cur_op_context());
     describe_array( (AV *)(*(MARK+1)) );
@@ -82,7 +84,7 @@ pp_stmt_handle_shift(pTHX)
 static OP *
 pp_stmt_handle_unshift(pTHX)
 {
-    dSP; dMARK;
+    dSP; sMARK;
 
     fprintf(out, "%s unshift ", cur_op_context());
     describe_array( (AV *)(*(MARK+1)) );
@@ -94,7 +96,7 @@ pp_stmt_handle_unshift(pTHX)
 static OP *
 pp_stmt_handle_splice(pTHX)
 {
-    dSP; dMARK;
+    dSP; sMARK;
     I32 nargs = SP-MARK-1;
 
     fprintf(out, "%s splice ", cur_op_context());
@@ -117,7 +119,7 @@ pp_stmt_handle_splice(pTHX)
 static OP *
 pp_stmt_handle_aelem(pTHX)
 {
-    dSP; dMARK;
+    dSP; sMARK;
 
     fprintf(out, "%s", cur_op_context());
     if ( PL_op->op_flags & OPf_MOD ) {
@@ -134,7 +136,7 @@ pp_stmt_handle_aelem(pTHX)
 static OP *
 pp_stmt_handle_aelemfast(pTHX)
 {
-    dSP; dMARK;
+    dSP; sMARK;
 
     fprintf(out, "%s", cur_op_context());
     if ( PL_op->op_flags & OPf_MOD ) {
