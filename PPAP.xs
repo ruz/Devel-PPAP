@@ -44,9 +44,13 @@ describe_array(const AV* const av) {
         fprintf(out, "@T");
     }
 
-    size = AvMAX(av);
+    size = AvFILLp(av);
+/*
+    if ( size > 1000 )
+        Perl_warner(aTHX_ packWARN(WARN_MISC), "Big array used: %"IVdf, (IV)size);
+*/
     prefix = AvARRAY(av) - AvALLOC(av);
-    sufix = AvFILLp(av) - size;
+    sufix = AvMAX(av) - size;
 
     fprintf(out, "@%"IVdf"-%"IVdf"-%"IVdf, (IV)prefix, (IV)size+1, (IV)sufix);
 }
