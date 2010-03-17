@@ -23,10 +23,11 @@ my %results = (
 );
 
 walk_report( sub {
-    my ($ctx,$lval,$op,$args) = @_;
-    $results{ops}{$op}++;
-    $results{context}{$op}{$ctx}++;
-    $results{lvalue}{$op}++ if $lval;
+    my ($ctx,$lval,$op,$args, $time) = @_;
+    $results{'ops'}{$op}++;
+    $results{'time'}{$op} += $time;
+    $results{'context'}{$op}{$ctx}++;
+    $results{'lvalue'}{$op}++ if $lval;
 } );
 
 report();
@@ -49,11 +50,12 @@ sub walk_report {
     open my $fh, '<:utf8', 'ppap.out';
     while ( my $str = <$fh> ) {
         chomp($str);
-        unless ( $str =~ /^([-\$\@])(=?)\s(\w+)\s*(.*)$/ ) {
+        unless ( $str =~ /^([-\$\@])(=?)\s(\w+)\s*(.*)\s+\|([0-9]+)$/ ) {
             warn "String '$str' is not parsable";
+            next;
         }
 
-        $cb->($1, $2, $3, $4);
+        $cb->($1, $2, $3, $4, $5);
     }
     close $fh;
 }
@@ -83,17 +85,23 @@ sub out_pp_usage {
     my ($out, $results) = (@_);
     my $total = 0;
     $total += $_ foreach values %{ $results->{'ops'} };
+    my $ttime = 0;
+    $ttime += $_ foreach values %{ $results->{'time'} };
 
     print $out "<h1>PPs usage</h1>\n";
-    print $out "<table>\n<tr><th>PP</th><th>Count</th><th>%</th></tr>\n";
+    print $out "<table>\n<tr><th>PP</th><th>count</th><th>%</th><th>time</th><th>%</th><th>avg.</th><th>ratio</th></tr>\n";
     foreach my $op (
-        sort { $results->{'ops'}{$b} <=> $results->{'ops'}{$a} }
+        sort { $results->{'time'}{$b} <=> $results->{'time'}{$a} }
         keys %{ $results->{'ops'} }
     ) {
         printf
             $out
-            "<tr><td>%s</td><td>%d</td><th>%0.2f</td></tr>",
-            $op, $results->{'ops'}{$op}, (100*$results->{'ops'}{$op})/$total
+            "<tr><td>%s</td><td>%d</td><td>%0.2f</td><td>%d</td><td>%0.2f</td><td>%0.3f</td><td>%0.2f</td></tr>",
+            $op,
+            $results->{'ops'}{$op}, (100*$results->{'ops'}{$op})/$total,
+            $results->{'time'}{$op}, (100*$results->{'time'}{$op})/$ttime,
+            $results->{'time'}{$op}/$results->{'ops'}{$op},
+            ($results->{'time'}{$op}/$ttime)/($results->{'ops'}{$op}/$total),
         ;
     }
     print $out "</table>\n";
@@ -242,8 +250,9 @@ sub out_arrays_arguments {
 
     walk_report( sub {
         my ($ctx,$lval,$op,$args) = @_;
-        return unless rindex($args, '@(') >= 0;
-        my ($prefix, $length, $sufix) = ($args =~ /@\([^\)]+\)([0-9]+)-([0-9]+)-([0-9]+)/);
+        return unless rindex($args, '@') >= 0;
+        my ($prefix, $length, $sufix) = ($args =~ /@\_?\([^\)]+\)([0-9]+)-([0-9]+)-([0-9]+)/);
+        next unless defined $prefix;
         $stats{$op}{'prefix'}{$prefix}++;
         $stats{$op}{'length'}{$length}++;
         $stats{$op}{'sufix'}{$sufix}++;

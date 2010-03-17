@@ -2,11 +2,414 @@
 #include "perl.h"
 #include "XSUB.h"
 
+/* time tracking */
+/*
+    Almost exact copy from NYTProf, I would love to see it
+    generalized.
+
+*/
+
+#define HAS_MACH_TIME
+
+#ifdef HAS_CLOCK_GETTIME
+typedef struct timespec time_of_day_t;
+#  define CLOCK_GETTIME(ts) clock_gettime(profile_clock, ts)
+#  define CLOCKS_PER_TICK 10000000                /* 10 million - 100ns */
+#  define get_time_of_day(into) CLOCK_GETTIME(&into)
+#  define get_ticks_between(s, e, ticks, overflow) STMT_START { \
+    overflow = 0; \
+    ticks = ((e.tv_sec - s.tv_sec) * CLOCKS_PER_TICK + (e.tv_nsec / 100) - (s.tv_nsec / 100)); \
+} STMT_END
+
+#else                                             /* !HAS_CLOCK_GETTIME */
+
+#ifdef HAS_MACH_TIME
+
+#include <mach/mach.h>
+#include <mach/mach_time.h>
+
+mach_timebase_info_data_t  our_timebase;
+typedef uint64_t time_of_day_t;
+
+#  define CLOCKS_PER_TICK 10000000                /* 10 million - 100ns */
+#  define get_time_of_day(into) into = mach_absolute_time()
+#  define get_ticks_between(s, e, ticks, overflow) STMT_START { \
+    overflow = 0; \
+    if( our_timebase.denom == 0 ) mach_timebase_info(&our_timebase); \
+    ticks = (e-s) * our_timebase.numer / our_timebase.denom / 100; \
+} STMT_END
+
+#else                                             /* !HAS_MACH_TIME */
+
+#ifdef HAS_GETTIMEOFDAY
+typedef struct timeval time_of_day_t;
+#  define CLOCKS_PER_TICK 1000000                 /* 1 million */
+#  define get_time_of_day(into) gettimeofday(&into, NULL)
+#  define get_ticks_between(s, e, ticks, overflow) STMT_START { \
+    overflow = 0; \
+    ticks = ((e.tv_sec - s.tv_sec) * CLOCKS_PER_TICK + e.tv_usec - s.tv_usec); \
+} STMT_END
+#else
+static int (*u2time)(pTHX_ UV *) = 0;
+typedef UV time_of_day_t[2];
+#  define CLOCKS_PER_TICK 1000000                 /* 1 million */
+#  define get_time_of_day(into) (*u2time)(aTHX_ into)
+#  define get_ticks_between(s, e, ticks, overflow)  STMT_START { \
+    overflow = 0; \
+    ticks = ((e[0] - s[0]) * CLOCKS_PER_TICK + e[1] - s[1]); \
+} STMT_END
+#endif
+#endif
+#endif
+
+static time_of_day_t start_time, end_time;
+/* end of time tracking */
+
 typedef OP * (CPERLscope(*orig_ppaddr_t))(pTHX);
 orig_ppaddr_t *PL_ppaddr_orig;
-#define run_original_op(type) CALL_FPTR(PL_ppaddr_orig[type])(aTHX)
+#define run_original_op(type) STMT_START { \
+    OP* rv; long elapsed, overflow; \
+    get_time_of_day(start_time); \
+    rv = CALL_FPTR(PL_ppaddr_orig[type])(aTHX); \
+    get_time_of_day(end_time); \
+    get_ticks_between(start_time, end_time, elapsed, overflow); \
+    fprintf(out, " |%"IVdf"\n", elapsed); \
+    return rv; \
+} STMT_END
+
 /* sMARK like dMARK, but doesn't change anything */
 #define sMARK register SV **mark = PL_stack_base + TOPMARK
+
+
+static const int const handle_ops[OP_max] = {
+        OP_WANTARRAY ,
+        OP_CONST     ,
+        OP_GVSV      ,
+        OP_GV        ,
+        OP_GELEM     ,
+//        OP_PADSV     ,
+//        OP_PADAV     ,
+//        OP_PADHV     ,
+//        OP_PADANY    ,
+//        OP_PUSHRE    ,
+        OP_RV2GV     ,
+        OP_RV2SV     ,
+        OP_AV2ARYLEN   ,
+        OP_RV2CV     ,
+        OP_REFGEN      ,
+        OP_SREFGEN   ,
+        OP_REF       ,
+        OP_BLESS       ,
+        OP_BACKTICK    ,
+        OP_GLOB      ,
+        OP_READLINE  ,
+        OP_RCATLINE  ,
+        OP_QR        ,
+        OP_SUBST     ,
+        OP_SUBSTCONT     ,
+        OP_TRANS         ,
+        OP_SASSIGN       ,
+        OP_AASSIGN       ,
+        OP_CHOP          ,
+        OP_SCHOP         ,
+        OP_CHOMP         ,
+        OP_SCHOMP        ,
+        OP_DEFINED       ,
+//        OP_UNDEF         ,
+        OP_STUDY         ,
+        OP_POS           ,
+        OP_PREINC        ,
+        OP_I_PREINC      ,
+        OP_PREDEC        ,
+        OP_I_PREDEC      ,
+        OP_POSTINC       ,
+        OP_I_POSTINC     ,
+        OP_POSTDEC       ,
+        OP_I_POSTDEC     ,
+        OP_POW           ,
+        OP_MULTIPLY      ,
+        OP_I_MULTIPLY    ,
+        OP_DIVIDE        ,
+        OP_I_DIVIDE      ,
+        OP_MODULO        ,
+        OP_I_MODULO      ,
+        OP_REPEAT        ,
+        OP_ADD           ,
+        OP_I_ADD         ,
+        OP_SUBTRACT      ,
+        OP_I_SUBTRACT    ,
+        OP_CONCAT        ,
+        OP_STRINGIFY     ,
+        OP_LEFT_SHIFT    ,
+        OP_RIGHT_SHIFT   ,
+        OP_LT            ,
+        OP_I_LT          ,
+        OP_GT            ,
+        OP_I_GT          ,
+        OP_LE            ,
+        OP_I_LE          ,
+        OP_GE            ,
+        OP_I_GE          ,
+        OP_EQ            ,
+        OP_I_EQ          ,
+        OP_NE            ,
+        OP_I_NE          ,
+        OP_NCMP          ,
+        OP_I_NCMP        ,
+        OP_SLT           ,
+        OP_SGT           ,
+        OP_SLE           ,
+        OP_SGE           ,
+        OP_SEQ           ,
+        OP_SNE           ,
+        OP_SCMP          ,
+        OP_BIT_AND       ,
+        OP_BIT_XOR       ,
+        OP_BIT_OR        ,
+        OP_NEGATE        ,
+        OP_I_NEGATE      ,
+        OP_NOT           ,
+//        OP_COMPLEMENT    ,
+//        OP_SMARTMATCH    ,
+        OP_ATAN2         ,
+        OP_SIN           ,
+        OP_COS           ,
+        OP_RAND          ,
+        OP_SRAND         ,
+        OP_EXP           ,
+        OP_LOG           ,
+        OP_SQRT          ,
+        OP_INT           ,
+        OP_HEX           ,
+        OP_OCT           ,
+        OP_ABS           ,
+        OP_LENGTH        ,
+        OP_SUBSTR        ,
+        OP_VEC           ,
+        OP_INDEX         ,
+        OP_RINDEX        ,
+        OP_SPRINTF       ,
+        OP_FORMLINE      ,
+        OP_ORD           ,
+        OP_CHR           ,
+        OP_CRYPT         ,
+        OP_UCFIRST       ,
+        OP_LCFIRST       ,
+        OP_UC            ,
+        OP_LC            ,
+        OP_QUOTEMETA     ,
+        OP_RV2AV         ,
+        OP_AELEMFAST     ,
+        OP_AELEM         ,
+        OP_ASLICE        ,
+//        OP_AEACH         ,
+//        OP_AKEYS         ,
+//        OP_AVALUES       ,
+        OP_EACH          ,
+        OP_VALUES        ,
+        OP_KEYS          ,
+        OP_DELETE        ,
+        OP_EXISTS        ,
+        OP_RV2HV         ,
+        OP_HELEM         ,
+        OP_HSLICE        ,
+//        OP_BOOLKEYS      ,
+        OP_UNPACK        ,
+        OP_PACK          ,
+        OP_SPLIT         ,
+        OP_JOIN          ,
+        OP_LIST          ,
+        OP_LSLICE        ,
+        OP_ANONLIST      ,
+        OP_ANONHASH      ,
+        OP_SPLICE        ,
+        OP_PUSH          ,
+        OP_POP           ,
+        OP_SHIFT         ,
+        OP_UNSHIFT       ,
+        OP_SORT          ,
+        OP_REVERSE       ,
+//        OP_GREPSTART     ,
+//        OP_GREPWHILE     ,
+//        OP_MAPSTART      ,
+//        OP_MAPWHILE      ,
+        OP_RANGE         ,
+        OP_FLIP          ,
+        OP_FLOP          ,
+        OP_AND           ,
+        OP_OR            ,
+        OP_XOR           ,
+//        OP_DOR           ,
+        OP_COND_EXPR     ,
+        OP_ANDASSIGN     ,
+        OP_ORASSIGN      ,
+//        OP_DORASSIGN     ,
+        OP_METHOD        ,
+//        OP_ENTERSUB      ,
+//        OP_LEAVESUB      ,
+//        OP_LEAVESUBLV    ,
+        OP_CALLER        ,
+        OP_WARN          ,
+        OP_DIE           ,
+        OP_RESET         ,
+//        OP_LINESEQ       ,
+//        OP_NEXTSTATE     ,
+//        OP_DBSTATE       ,
+//        OP_UNSTACK       ,
+//        OP_ENTER         ,
+//        OP_LEAVE         ,
+//        OP_SCOPE         ,
+//        OP_ENTERITER     ,
+//        OP_ITER          ,
+//        OP_ENTERLOOP     ,
+//        OP_LEAVELOOP     ,
+//        OP_RETURN        ,
+//        OP_LAST          ,
+//        OP_NEXT          ,
+//        OP_REDO          ,
+//        OP_DUMP          ,
+//        OP_GOTO          ,
+//        OP_EXIT          ,
+//        OP_METHOD_NAMED  ,
+//        OP_ENTERGIVEN    ,
+//        OP_LEAVEGIVEN    ,
+//        OP_ENTERWHEN     ,
+//        OP_LEAVEWHEN     ,
+//        OP_BREAK         ,
+//        OP_CONTINUE      ,
+        OP_OPEN          ,
+        OP_CLOSE         ,
+        OP_PIPE_OP       ,
+        OP_FILENO        ,
+        OP_UMASK         ,
+        OP_BINMODE       ,
+        OP_TIE           ,
+        OP_UNTIE         ,
+        OP_TIED          ,
+        OP_SSELECT       ,
+        OP_SELECT        ,
+        OP_GETC          ,
+//        OP_READ          ,
+//        OP_ENTERWRITE    ,
+//        OP_LEAVEWRITE    ,
+        OP_PRTF          ,
+        OP_PRINT         ,
+//        OP_SAY           ,
+        OP_SYSOPEN       ,
+        OP_SYSSEEK       ,
+        OP_SYSREAD       ,
+        OP_SYSWRITE      ,
+        OP_EOF           ,
+        OP_TELL          ,
+        OP_SEEK          ,
+        OP_TRUNCATE      ,
+        OP_FCNTL         ,
+        OP_IOCTL         ,
+        OP_FLOCK         ,
+        OP_SEND          ,
+        OP_RECV          ,
+        OP_SOCKET        ,
+        OP_SOCKPAIR      ,
+        OP_BIND          ,
+        OP_CONNECT       ,
+        OP_LISTEN        ,
+//        OP_ACCEPT        ,
+        OP_SHUTDOWN      ,
+        OP_GSOCKOPT      ,
+        OP_SSOCKOPT      ,
+        OP_GETSOCKNAME   ,
+        OP_GETPEERNAME   ,
+        OP_LSTAT         ,
+        OP_STAT          ,
+        OP_CHDIR         ,
+        OP_CHOWN         ,
+        OP_CHROOT        ,
+        OP_UNLINK        ,
+        OP_CHMOD         ,
+        OP_UTIME         ,
+        OP_RENAME        ,
+        OP_LINK          ,
+        OP_SYMLINK       ,
+        OP_READLINK      ,
+        OP_MKDIR         ,
+        OP_RMDIR         ,
+        OP_OPEN_DIR      ,
+        OP_READDIR       ,
+        OP_TELLDIR       ,
+        OP_SEEKDIR       ,
+        OP_REWINDDIR     ,
+        OP_CLOSEDIR      ,
+//        OP_FORK          ,
+//        OP_WAIT          ,
+//        OP_WAITPID       ,
+//        OP_SYSTEM        ,
+//        OP_EXEC          ,
+        OP_KILL          ,
+        OP_GETPPID       ,
+        OP_GETPGRP       ,
+        OP_SETPGRP       ,
+        OP_GETPRIORITY   ,
+        OP_SETPRIORITY   ,
+        OP_TIME          ,
+        OP_TMS           ,
+        OP_LOCALTIME     ,
+        OP_GMTIME        ,
+        OP_ALARM         ,
+        OP_SLEEP         ,
+//        OP_SHMGET        ,
+//        OP_SHMCTL        ,
+//        OP_SHMREAD       ,
+//        OP_SHMWRITE      ,
+//        OP_MSGGET        ,
+//        OP_MSGCTL        ,
+//        OP_MSGSND        ,
+//        OP_MSGRCV        ,
+//        OP_SEMOP         ,
+//        OP_SEMGET        ,
+//        OP_SEMCTL        ,
+//        OP_REQUIRE       ,
+//        OP_DOFILE        ,
+//        OP_HINTSEVAL     ,
+//        OP_ENTEREVAL     ,
+//        OP_LEAVEEVAL     ,
+//        OP_ENTERTRY      ,
+//        OP_LEAVETRY      ,
+//        OP_GHBYNAME      ,
+//        OP_GHBYADDR      ,
+//        OP_GHOSTENT      ,
+//        OP_GNBYNAME      ,
+//        OP_GNBYADDR      ,
+//        OP_GNETENT       ,
+//        OP_GPBYNAME      ,
+//        OP_GPBYNUMBER    ,
+//        OP_GPROTOENT     ,
+//        OP_GSBYNAME      ,
+//        OP_GSBYPORT      ,
+//        OP_GSERVENT      ,
+//        OP_SHOSTENT      ,
+//        OP_SNETENT       ,
+//        OP_SPROTOENT     ,
+//        OP_SSERVENT      ,
+//        OP_EHOSTENT      ,
+//        OP_ENETENT       ,
+//        OP_EPROTOENT     ,
+//        OP_ESERVENT      ,
+//        OP_GPWNAM        ,
+//        OP_GPWUID        ,
+//        OP_GPWENT        ,
+//        OP_SPWENT        ,
+//        OP_EPWENT        ,
+//        OP_GGRNAM        ,
+//        OP_GGRGID        ,
+//        OP_GGRENT        ,
+//        OP_SGRENT        ,
+//        OP_EGRENT        ,
+//        OP_GETLOGIN      ,
+        OP_SYSCALL       ,
+//        OP_LOCK          ,
+//        OP_ONCE          ,
+        OP_CUSTOM        
+};
 
 FILE* out;
 
@@ -36,6 +439,21 @@ cur_op_context()
     }
 }
 
+static char*
+type_to_name(int type)
+{
+    int context = OP_GIMME(PL_op, 0);
+    if ( context == G_SCALAR ) {
+        return "$";
+    } else if ( context == G_ARRAY ) {
+        return "@";
+    } else if ( context == G_VOID ) {
+        return "-";
+    } else {
+        return "?";
+    }
+}
+
 void
 describe_array(pTHX_ const AV* const av) {
     I32 prefix, size, sufix;
@@ -52,7 +470,12 @@ describe_array(pTHX_ const AV* const av) {
     prefix = AvARRAY(av) - AvALLOC(av);
     sufix = AvMAX(av) - size;
 
-    fprintf(out, "@(0x%"UVxf")%"IVdf"-%"IVdf"-%"IVdf, PTR2UV(av), (IV)prefix, (IV)size+1, (IV)sufix);
+    if ( GvAV(PL_defgv) == av ) {
+        fprintf(out, "@_(0x%"UVxf")%"IVdf"-%"IVdf"-%"IVdf, PTR2UV(av), (IV)prefix, (IV)size+1, (IV)sufix);
+    } else {
+        fprintf(out, "@(0x%"UVxf")%"IVdf"-%"IVdf"-%"IVdf, PTR2UV(av), (IV)prefix, (IV)size+1, (IV)sufix);
+    }
+
 }
 
 static OP *
@@ -62,9 +485,9 @@ pp_stmt_handle_push(pTHX)
 
     fprintf(out, "%s push ", cur_op_context());
     describe_array(aTHX_ (AV *)(*(MARK+1)) );
-    fprintf(out, ", ...%"IVdf"\n", SP-MARK-1);
+    fprintf(out, ", ...%"IVdf, SP-MARK-1);
 
-    return run_original_op(PL_op->op_type);
+    run_original_op(PL_op->op_type);
 }
 
 static OP *
@@ -78,9 +501,8 @@ pp_stmt_handle_shift(pTHX)
         fprintf(out, "%s pop ", cur_op_context());
     }
     describe_array(aTHX_ (AV *)(TOPs) );
-    fprintf(out, "\n");
 
-    return run_original_op(PL_op->op_type);
+    run_original_op(PL_op->op_type);
 }
 
 static OP *
@@ -90,9 +512,9 @@ pp_stmt_handle_unshift(pTHX)
 
     fprintf(out, "%s unshift ", cur_op_context());
     describe_array(aTHX_ (AV*)*(MARK+1) );
-    fprintf(out, ", ...%"IVdf"\n", (IV)(SP-MARK-1));
+    fprintf(out, ", ...%"IVdf, (IV)(SP-MARK-1));
 
-    return run_original_op(PL_op->op_type);
+    run_original_op(PL_op->op_type);
 }
 
 static OP *
@@ -113,9 +535,8 @@ pp_stmt_handle_splice(pTHX)
     if ( nargs > 0 ) {
         fprintf(out, ", ...%"IVdf, nargs);
     }
-    fprintf(out, "\n");
 
-    return run_original_op(PL_op->op_type);
+    run_original_op(PL_op->op_type);
 }
 
 static OP *
@@ -133,9 +554,8 @@ pp_stmt_handle_aelem(pTHX)
         describe_array(aTHX_ (AV *)TOPm1s );
         fprintf(out, ", %"IVdf, (IV)SvIV(TOPs));
     }
-    fprintf(out, "\n");
 
-    return run_original_op(PL_op->op_type);
+    run_original_op(PL_op->op_type);
 }
 
 static OP *
@@ -156,9 +576,9 @@ pp_stmt_handle_aelemfast(pTHX)
         describe_array(aTHX_ GvAV(cGVOP_gv) );
     }
 
-    fprintf(out, ", %"IVdf"\n", (IV) PL_op->op_private);
+    fprintf(out, ", %"IVdf, (IV) PL_op->op_private);
 
-    return run_original_op(PL_op->op_type);
+    run_original_op(PL_op->op_type);
 }
 
 static OP *
@@ -170,14 +590,29 @@ pp_stmt_handle_sassign(pTHX)
     if ( PL_op->op_flags & OPf_MOD ) {
         fprintf(out, "=");
     }
-    fprintf(out, " sassign\n");
+    fprintf(out, " sassign");
 
-    return run_original_op(PL_op->op_type);
+    run_original_op(PL_op->op_type);
+}
+
+static OP *
+pp_stmt_handle_simple(pTHX)
+{
+    dSP; sMARK;
+    fprintf(
+        out, "%s%s %s",
+        cur_op_context(),
+        PL_op->op_flags & OPf_MOD? "=": "",
+        OP_NAME(PL_op)
+    );
+
+    run_original_op(PL_op->op_type);
 }
 
 static int
 init_handler(pTHX)
 {
+    int i;
     Newxc(PL_ppaddr_orig, OP_max, void *, orig_ppaddr_t);
     Copy(PL_ppaddr, PL_ppaddr_orig, OP_max, void *);
 
@@ -191,8 +626,10 @@ init_handler(pTHX)
 
     PL_ppaddr[OP_SPLICE]     = pp_stmt_handle_splice;
 
-// leave it alone now, too much noise for nothing
-//    PL_ppaddr[OP_SASSIGN]    = pp_stmt_handle_sassign;
+    for( i = 0; i < OP_max; i++ ) {
+        if ( handle_ops[i] != 0 && PL_ppaddr[handle_ops[i]] == PL_ppaddr_orig[handle_ops[i]] )
+            PL_ppaddr[handle_ops[i]] = pp_stmt_handle_simple;
+    }
 
     out = open_report_file();
 }
