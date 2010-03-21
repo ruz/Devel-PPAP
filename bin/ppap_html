@@ -705,6 +705,20 @@ sub out_footer {
     print $out "</body></html>\n";
 }
 
+sub prepare_report_dir {
+    use File::ShareDir qw(dist_dir);
+    use File::Path qw(make_path);
+    use File::Copy qw(copy);
+
+    foreach my $n (qw(css js)) {
+        my $src = File::Spec->catfile( dist_dir('Devel-PPAP'), $n, '*' );
+        print "$src\n";
+        my $dst = File::Spec->catdir('ppap', $n);
+        make_path( $dst, {} );
+        copy($_, $dst) foreach glob $src;
+    }
+}
+
 sub new_file {
     my $name = shift;
     open my $fh, '>:utf8', File::Spec->catfile('ppap', $name );
