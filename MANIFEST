@@ -7,6 +7,7 @@ inc/Module/Install/Makefile.pm
 inc/Module/Install/Metadata.pm
 inc/Module/Install/ReadmeFromPod.pm
 inc/Module/Install/Scripts.pm
+inc/Module/Install/Share.pm
 inc/Module/Install/Win32.pm
 inc/Module/Install/WriteAll.pm
 lib/Devel/PPAP.pm
@@ -20,3 +21,4 @@ samples/unshift_sequence.pl
 share/css/main.css
 share/js/jquery-1.4.2.min.js
 share/js/jquery.tablesorter.min.js
+share/js/ppap.js
