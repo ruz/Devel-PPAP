@@ -336,9 +336,6 @@ my %OP_GROUP = (
 );
 
 my %results = (
-    ops => {},
-    op_patterns => {},
-    contexts => {},
 );
 
 walk_report( sub {
@@ -349,19 +346,27 @@ walk_report( sub {
     $results{'lvalue'}{$op}++ if $lval;
 } );
 
+prepare_report_dir();
+
 report();
 exit 0;
 
 sub report {
     my $fh = new_file('index.html');
     out_head($fh, 'PP op codes access patterns');
-    out_groups_stats($fh, \%results);
+    out_groupped_usage($fh, \%results);
     out_pp_usage($fh, \%results);
     out_context($fh, $results{'context'});
     out_variable_arguments($fh);
     out_arrays_arguments($fh);
     out_footer($fh);
     close $fh;
+
+    pp_reports();
+}
+
+sub pp_reports {
+
 }
 
 sub walk_report {
@@ -369,7 +374,7 @@ sub walk_report {
     open my $fh, '<:utf8', 'ppap.out';
     while ( my $str = <$fh> ) {
         chomp($str);
-        unless ( $str =~ /^([-\$\@])(=?)\s(\w+)\s*(.*)\s+\|([0-9]+)$/ ) {
+        unless ( $str =~ /^([-\$\@?])(=?)\s(\w+)\s*(.*)\s+\|([0-9]+)$/ ) {
             warn "String '$str' is not parsable";
             next;
         }
@@ -379,25 +384,26 @@ sub walk_report {
     close $fh;
 }
 
-sub out_groups_stats {
+sub out_groupped_usage {
     my ($out, $results) = (@_);
     my $total = 0;
     my %grps = ();
     while ( my ($op, $count) = each %{ $results->{'ops'} } ) {
-        $grps{ $OP_GROUP{$op} || 'other' } += $count;
+        $grps{ $OP_GROUP{uc $op} || 'other' } += $count;
         $total += $count;
     }
 
-    print $out "<h1>Groupped OPs</h1>\n";
-    print $out "<table>\n<tr><th>Group</th><th>Count</th><th>%</th></tr>\n";
-    foreach my $group ( sort { $grps{$b} <=> $grps{$a} } keys %grps ) {
-        printf
-            $out
-            "<tr><td>%s</td><td>%d</td><th>%0.2f</td></tr>",
-            $group, $grps{$group}, (100*$grps{$group})/$total
-        ;
-    }
-    print $out "</table>\n";
+    render_table(
+        $out,
+        title => 'Groupped PPs usage',
+        elements => [ sort keys %grps ],
+        columns  => [qw(Group count %)],
+        type     => [qw(string counter percent)],
+        callback => sub {
+            my $group = shift;
+            return [$group, $grps{$group}, (100*$grps{$group})/$total];
+        }
+    );
 }
 
 sub out_pp_usage {
@@ -407,23 +413,55 @@ sub out_pp_usage {
     my $ttime = 0;
     $ttime += $_ foreach values %{ $results->{'time'} };
 
-    print $out "<h1>PPs usage</h1>\n";
-    print $out "<table>\n<tr><th>PP</th><th>count</th><th>%</th><th>time</th><th>%</th><th>avg.</th><th>ratio</th></tr>\n";
-    foreach my $op (
-        sort { $results->{'time'}{$b} <=> $results->{'time'}{$a} }
-        keys %{ $results->{'ops'} }
-    ) {
-        printf
-            $out
-            "<tr><td>%s</td><td>%d</td><td>%0.2f</td><td>%d</td><td>%0.2f</td><td>%0.3f</td><td>%0.2f</td></tr>",
-            $op,
-            $results->{'ops'}{$op}, (100*$results->{'ops'}{$op})/$total,
-            $results->{'time'}{$op}, (100*$results->{'time'}{$op})/$ttime,
-            $results->{'time'}{$op}/$results->{'ops'}{$op},
-            ($results->{'time'}{$op}/$ttime)/($results->{'ops'}{$op}/$total),
-        ;
+    render_table(
+        $out,
+        title => 'PPs usage',
+        elements => [ sort keys %{ $results->{'ops'} } ],
+        columns  => [qw(PP group count % time % mean ratio)],
+        type     => [qw(string string counter percent time percent num num)],
+        callback => sub {
+            my $op = shift;
+            my $count_perc = (100*$results->{'ops'}{$op})/$total;
+            my $time_perc = (100*$results->{'time'}{$op})/$ttime;
+            return [
+                $op, $OP_GROUP{uc $op} || 'other',
+                $results->{'ops'}{$op}, $count_perc,
+                $results->{'time'}{$op}, $time_perc,
+                $results->{'time'}{$op}/$results->{'ops'}{$op},
+                ($time_perc/$count_perc),
+            ];
+        },
+    );
+}
+
+sub render_table {
+    my $out = shift;
+    my %args = @_;
+
+    my $res = '';
+    if ( $args{'title'} ) {
+        $res .= "<h1>$args{'title'}</h1>\n";
     }
-    print $out "</table>\n";
+    $res .= '<table class="sortable">'. "\n";
+    $res .= "<thead><tr>". join('', map "<th>$_</th>", @{ $args{'columns'} }) ."</tr></thead>\n";
+
+    foreach my $e ( @{ $args{'elements'} } ) {
+        $e = $args{'callback'}->( $e );
+    }
+
+    if ( $args{'sort'} ) {
+        # ...
+    }
+
+    $res .= "<tbody>\n";
+    foreach my $row ( @{ $args{'elements'} } ) {
+        $res .= "<tr>". join('', map "<td>$_</td>", @$row) ."</tr>\n"
+    }
+    $res .= "</tbody>\n";
+
+    $res .= "</table>\n\n";
+
+    print $out $res;
 }
 
 sub out_context {
