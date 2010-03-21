@@ -46,6 +46,95 @@ AUDIENCE
     function in PPAP.xs to see a warning when an array with more than 1000
     elements is used in executed code.
 
+CAVEATS AND KNOW ISSUES
+  Compilation fail on anything, but MacOS
+    No detection of supported clocks. Comment the following line in PPAP.xs
+
+        #define HAS_MACH_TIME
+
+TODO
+    Things that would be cool to implement splitted by area of expertize.
+    Pick anything you like to do.
+
+  Java Script (jquery)
+    At this point jquery and jquery.tablesorter are used to sort tables and
+    there are plenty of things that can be improved:
+
+    *   default sorting for numbers
+
+        Default sorting for numbers is ascending, but it doesn't make much
+        sense for counters. We usally want big numbers first.
+
+    *   big tables split
+
+        Part of a big table should be hidden by default. jquery.tablesorter
+        has a pager plugin, it's very similar, but only two pages, for
+        example 20 first and rest, with hide/show link somewhere.
+
+    *   line coloring widget when table sorted by number
+
+        Better visual distinction of offenders. Table rows marked with
+        different CSS classes depending on number. For example three
+        clusters: neutral, yellow and red. Some smart clusterization
+        algorithm can be used. jquery.tablesorter has zebra plugin that can
+        be used to implement this.
+
+    *   ...
+
+  CSS and nice look
+    Add a lot of classes and styling to make page look pretty.
+
+  Perl (reports processing)
+    Lots and lots ways to represent the data.
+
+    *   per PP function reports
+
+        For example I'm working on push and other arrays related functions
+        and the following reports may be interesting:
+
+        *   stats on sizes of arrays we work with
+
+        *   stats on sizes of varying arguments lists
+
+        *   Number of cases when there is enough free slots on the right
+            side of the array. Number of cases when there is enough slots on
+            the left and rights. Not enough slots.
+
+        *   correlation between time spent and above cases
+
+    *   detecting code anomalies
+
+        Big arrays usages or something like that.
+
+    *   correlation analyzis
+
+    *   graphs?
+
+    *   ...
+
+  XS, C and perl guts
+    *   hash, string, scalar describer
+
+        Something like describe_array function that reports interesting
+        information about SV.
+
+    *   check in Makefile for available clock functions
+
+        At this moment MacOS fast timing functions are used by default :).
+        Module makes no sense without a timer that support at least 100ns
+        resolution.
+
+    *   fork support
+
+        After fork we should open a new file for report.
+
+    *   functions to start and stop profiling
+
+        Compilation may be quite heavy in big projects and you have to run a
+        lot of actual code to neglect that.
+
+    *   ...
+
 CREDITS
     Thanks to authors and contributors of Devel::NYTProf for great pile of
     wisdom on overriding pp_* functions and other staffs I hope to borrow
