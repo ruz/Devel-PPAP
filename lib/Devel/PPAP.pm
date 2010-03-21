@@ -64,9 +64,125 @@ sure it's possible to implement. You can uncomment two lines
 in C<describe_array> function in PPAP.xs to see a warning when
 an array with more than 1000 elements is used in executed code.
 
+=head1 CAVEATS AND KNOW ISSUES
+
+=head2 Compilation fail on anything, but MacOS
+
+No detection of supported clocks. Comment the following line
+in PPAP.xs
+
+    #define HAS_MACH_TIME
+
 =cut
 
 init_handler();
+
+=head1 TODO
+
+Things that would be cool to implement splitted by area of
+expertize. Pick anything you like to do.
+
+=head2 Java Script (jquery)
+
+At this point jquery and jquery.tablesorter are used to sort tables
+and there are plenty of things that can be improved:
+
+=over
+
+=item * default sorting for numbers
+
+Default sorting for numbers is ascending, but it doesn't
+make much sense for counters. We usally want big numbers
+first.
+
+=item * big tables split
+
+Part of a big table should be hidden by default.
+jquery.tablesorter has a pager plugin, it's very similar,
+but only two pages, for example 20 first and rest, with
+hide/show link somewhere.
+
+=item * line coloring widget when table sorted by number
+
+Better visual distinction of offenders. Table rows marked with
+different CSS classes depending on number. For example three
+clusters: neutral, yellow and red. Some smart clusterization
+algorithm can be used. jquery.tablesorter has zebra plugin
+that can be used to implement this.
+
+=item * ...
+
+=back
+
+=head2 CSS and nice look
+
+Add a lot of classes and styling to make page look pretty.
+
+=head2 Perl (reports processing)
+
+Lots and lots ways to represent the data.
+
+=over
+
+=item * per PP function reports
+
+For example I'm working on push and other arrays related functions
+and the following reports may be interesting:
+
+=over
+
+=item * stats on sizes of arrays we work with
+
+=item * stats on sizes of varying arguments lists
+
+=item * Number of cases when there is enough free slots
+on the right side of the array. Number of cases when there
+is enough slots on the left and rights. Not enough slots.
+
+=item * correlation between time spent and above cases
+
+=back
+
+=item * detecting code anomalies
+
+Big arrays usages or something like that.
+
+=item * correlation analyzis
+
+=item * graphs?
+
+=item * ...
+
+=back
+
+=head2 XS, C and perl guts
+
+=over
+
+=item * hash, string, scalar describer
+
+Something like describe_array function that reports
+interesting information about SV.
+
+=item * check in Makefile for available clock functions
+
+At this moment MacOS fast timing functions are used by default :).
+Module makes no sense without a timer that support at least 100ns
+resolution.
+
+=item * fork support
+
+After fork we should open a new file for report.
+
+=item * functions to start and stop profiling
+
+Compilation may be quite heavy in big projects and
+you have to run a lot of actual code to neglect
+that.
+
+=item * ...
+
+=back
 
 =head1 CREDITS
 
