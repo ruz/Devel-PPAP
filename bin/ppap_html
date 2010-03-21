@@ -690,9 +690,14 @@ sub out_head {
     my $out = shift;
     my $title = shift;
     print $out '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"'
-        .' "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">'. "\n";
-    print $out "<html>\n<head><title>$title</title></head>\n";
-    print $out "<body>";
+        .' "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">', "\n";
+    print $out "<html>\n<head>\n";
+    print $out "<title>$title</title>\n";
+    print $out '<link rel="stylesheet" href="css/main.css" type="text/css" media="all" />', "\n";
+    print $out '<script type="text/javascript" src="js/jquery-1.4.2.min.js"></script>', "\n";
+    print $out '<script type="text/javascript" src="js/jquery.tablesorter.min.js"></script>', "\n";
+    print $out '<script type="text/javascript" src="js/ppap.js"></script>', "\n";
+    print $out "</head>\n<body>\n";
 }
 
 sub out_footer {
