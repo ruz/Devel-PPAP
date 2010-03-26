@@ -3,7 +3,11 @@
 use strict;
 use warnings;
 use autodie;
+
 use File::Spec;
+use File::ShareDir qw(dist_dir);
+use File::Path qw(make_path);
+use File::Copy qw(copy);
 
 my %OP_GROUP = (
     WANTARRAY => '',
@@ -29,16 +33,16 @@ my %OP_GROUP = (
     READLINE => '',
     RCATLINE => '',
     QR => 'regexp',
-    SUBST => 'string',
-    SUBSTCONT => 'string',
-    TRANS => '',
+    SUBST => 'regexp',
+    SUBSTCONT => 'regexp',
+    TRANS => 'string',
     SASSIGN => 'scalar',
     AASSIGN => 'array',
     CHOP => 'string',
     SCHOP => 'string',
     CHOMP => 'string',
     SCHOMP => 'string',
-    DEFINED => '',
+    DEFINED => 'logic',
     UNDEF => '',
     STUDY => 'string',
     POS => 'string',
@@ -339,11 +343,9 @@ my %results = (
 );
 
 walk_report( sub {
-    my ($ctx,$lval,$op,$args, $time) = @_;
+    my ($ctx,$lval,$op,$args,$time) = @_;
     $results{'ops'}{$op}++;
     $results{'time'}{$op} += $time;
-    $results{'context'}{$op}{$ctx}++;
-    $results{'lvalue'}{$op}++ if $lval;
 } );
 
 prepare_report_dir();
@@ -356,9 +358,8 @@ sub report {
     out_head($fh, 'PP op codes access patterns');
     out_groupped_usage($fh, \%results);
     out_pp_usage($fh, \%results);
-    out_context($fh, $results{'context'});
-    out_variable_arguments($fh);
-    out_arrays_arguments($fh);
+#    out_variable_arguments($fh);
+#    out_arrays_arguments($fh);
     out_footer($fh);
     close $fh;
 
@@ -366,7 +367,20 @@ sub report {
 }
 
 sub pp_reports {
+    foreach my $op ( sort keys %{ $results{'ops'} } ) {
+        my $fh = new_file('pp', $op .'.html');
 
+        out_head($fh, "$op specific usage stats");
+        my $func = 'out_pp_'.$op.'_usage';
+        if ( defined &{$func} ) {
+            &{$func}($fh);
+        } else {
+            out_pp_generic_usage($fh, $op);
+        }
+        out_footer($fh);
+
+        close $fh;
+    }
 }
 
 sub walk_report {
@@ -386,24 +400,38 @@ sub walk_report {
 
 sub out_groupped_usage {
     my ($out, $results) = (@_);
-    my $total = 0;
+
+    my ($tcount, $ttime) = (0, 0);
+
     my %grps = ();
     while ( my ($op, $count) = each %{ $results->{'ops'} } ) {
-        $grps{ $OP_GROUP{uc $op} || 'other' } += $count;
-        $total += $count;
+        $grps{ $OP_GROUP{uc $op} || 'other' }{'count'} += $count;
+        $tcount += $count;
+
+        $grps{ $OP_GROUP{uc $op} || 'other' }{'time'} += $results->{'time'}{$op};
+        $ttime += $results->{'time'}{$op}
     }
 
     render_table(
         $out,
         title => 'Groupped PPs usage',
         elements => [ sort keys %grps ],
-        columns  => [qw(Group count %)],
-        type     => [qw(string counter percent)],
+        columns  => [qw(Group count % time %)],
+        type     => [qw(string counter percent time percent)],
         callback => sub {
             my $group = shift;
-            return [$group, $grps{$group}, (100*$grps{$group})/$total];
+            return [
+                $group, 
+                $grps{$group}{'count'}, (100*$grps{$group}{'count'})/$tcount,
+                $grps{$group}{'time'}, (100*$grps{$group}{'time'})/$ttime,
+            ];
         }
     );
+}
+
+sub out_pp_generic_usage {
+    my ($out, $op) = (@_);
+    out_pp_context($out, $op);
 }
 
 sub out_pp_usage {
@@ -424,10 +452,43 @@ sub out_pp_usage {
             my $count_perc = (100*$results->{'ops'}{$op})/$total;
             my $time_perc = (100*$results->{'time'}{$op})/$ttime;
             return [
-                $op, $OP_GROUP{uc $op} || 'other',
+                "<a href='pp/$op.html'>$op</a>", $OP_GROUP{uc $op} || 'other',
                 $results->{'ops'}{$op}, $count_perc,
                 $results->{'time'}{$op}, $time_perc,
                 $results->{'time'}{$op}/$results->{'ops'}{$op},
+                ($time_perc/$count_perc),
+            ];
+        },
+    );
+}
+
+sub out_pp_context {
+    my $out = shift;
+    my $op = shift;
+
+    my %stats  = ();
+    walk_report( sub {
+        my ($ctx,$lval,$rop,$args,$time) = @_;
+        return unless $rop eq $op;
+
+        $stats{'counter'}{$ctx}++;
+        $stats{'time'}{$ctx} += $time;
+    } );
+
+    render_table(
+        $out,
+        title => 'Context',
+        elements => [ sort keys %{ $stats{'counter'} } ],
+        columns  => [qw(context count % time % ratio)],
+        type     => [qw(string counter percent time percent num)],
+        callback => sub {
+            my $ctx = shift;
+            my $count_perc = (100*$stats{'counter'}{$ctx})/$results{'ops'}{$op};
+            my $time_perc = (100*$stats{'time'}{$ctx})/$results{'time'}{$op};
+            return [
+                $ctx,
+                $stats{'counter'}{$ctx}, $count_perc,
+                $stats{'time'}{$ctx}, $time_perc,
                 ($time_perc/$count_perc),
             ];
         },
@@ -453,13 +514,66 @@ sub render_table {
         # ...
     }
 
+    my @totals;
+
     $res .= "<tbody>\n";
-    foreach my $row ( @{ $args{'elements'} } ) {
-        $res .= "<tr>". join('', map "<td>$_</td>", @$row) ."</tr>\n"
+
+    {
+        my @totals = ();
+        open my $fh, '>>', \$res;
+        foreach my $row ( @{ $args{'elements'} } ) {
+            render_table_row( $fh, $row, %args, totals => \@totals );
+        }
+        close $fh;
+        $res .= "</tbody>\n";
+
+        $res .= "<tfoot>\n";
+        open $fh, '>>', \$res;
+        render_table_row( $fh, \@totals, %args );
+        close $fh;
+        $res .= "</tfoot>\n";
+
     }
-    $res .= "</tbody>\n";
 
     $res .= "</table>\n\n";
+
+    print $out $res;
+}
+
+sub render_table_row {
+    my ($out, $row, %args) = @_;
+
+    my $res = "<tr>";
+    foreach my $i ( 0 .. @{ $args{'columns'} }-1 ) {
+        unless ( defined $row->[$i] && length $row->[$i] ) {
+            $res .= '<td>&nbsp;</td>';
+            next;
+        }
+
+        my $type = $args{'type'}[$i];
+        if ( $type eq 'string' ) {
+            $res .= '<td>'. $row->[$i] .'</td>';
+        }
+        elsif ( $type eq 'percent' ) {
+            $res .= sprintf '<td class="number">%0.2f</td>', $row->[$i];
+        }
+        elsif ( $type eq 'counter' ) {
+            $res .= sprintf '<td class="number">%d</td>', $row->[$i];
+            $args{'totals'}[$i] += $row->[$i] if $args{'totals'};
+        }
+        elsif ( $type eq 'num' ) {
+            $res .= sprintf '<td class="number">%0.3f</td>', $row->[$i];
+            $args{'totals'}[$i] += $row->[$i] if $args{'totals'};
+        }
+        elsif ( $type eq 'time' ) {
+            $res .= sprintf '<td class="number">%0.3f us</td>', $row->[$i]/10;
+            $args{'totals'}[$i] += $row->[$i] if $args{'totals'};
+        }
+        else {
+            die "boo: $type";
+        }
+    }
+    $res .= "</tr>\n";
 
     print $out $res;
 }
@@ -706,10 +820,6 @@ sub out_footer {
 }
 
 sub prepare_report_dir {
-    use File::ShareDir qw(dist_dir);
-    use File::Path qw(make_path);
-    use File::Copy qw(copy);
-
     foreach my $n (qw(css js)) {
         my $src = File::Spec->catfile( dist_dir('Devel-PPAP'), $n, '*' );
         print "$src\n";
@@ -720,8 +830,11 @@ sub prepare_report_dir {
 }
 
 sub new_file {
-    my $name = shift;
-    open my $fh, '>:utf8', File::Spec->catfile('ppap', $name );
+    my @path = @_;
+    my $name = pop @path;
+    my $dir = File::Spec->catfile('ppap', @path);
+    make_path($dir);
+    open my $fh, '>:utf8', File::Spec->catfile( $dir, $name );
     return $fh;
 }
 
