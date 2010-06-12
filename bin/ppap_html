@@ -342,6 +342,12 @@ my %OP_GROUP = (
 my %results = (
 );
 
+# PP reporters hash
+my %PP_REPORTER_FOR = (
+    push => \&out_pp_push_usage,
+);
+
+
 walk_report( sub {
     my ($ctx,$lval,$op,$args,$time) = @_;
     $results{'ops'}{$op}++;
@@ -364,25 +370,21 @@ sub report {
     out_footer($fh);
     close $fh;
 
-    pp_reports();
+    pp_report($_) for qw( or push shift ); # sort keys %{ $results{'ops'} }
 }
 
-sub pp_reports {
-    foreach my $op ( qw(or push shift) ) { #sort keys %{ $results{'ops'} } ) {
-        my $fh = new_file('pp', $op .'.html');
+# Generate report for specific operator
+sub pp_report {
+    my $op = shift;
 
-        out_head($fh, "$op specific usage stats", '../');
-        my $func = 'out_pp_'.$op.'_usage';
-        if ( defined &{$func} ) {
-            no strict 'refs';
-            &{$func}($fh);
-        } else {
-            out_pp_generic_usage($fh, $op);
-        }
-        out_footer($fh);
+    # Find specific 'reporter' function or use default one
+    my $reporter = $PP_REPORTER_FOR{$op} || \&out_pp_generic_usage;
 
-        close $fh;
-    }
+    my $fh = new_file('pp', "$op.html");
+    out_head($fh, "$op specific usage stats", '../');
+    $reporter->($fh, $op);
+    out_footer($fh);
+    close $fh;
 }
 
 # Обработать отчёт ppap.out
