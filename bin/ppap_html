@@ -911,19 +911,19 @@ sub calc_fractiles {
 
 # Вывод заголовка HTML-страницы
 sub out_head {
-    my $out = shift;
-    my $title = shift;
-    my $prfx = shift || '';
+    my $out    = shift;
+    my $title  = shift;
+    my $prefix = shift || '';
 
     print $out <<"END_HEADER";
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html>
 <head>
 <title>$title</title>
-<link rel="stylesheet" href="${prfx}css/main.css" type="text/css" media="all" />
-<script type="text/javascript" src="${prfx}js/jquery-1.4.2.min.js"></script>
-<script type="text/javascript" src="${prfx}js/jquery.tablesorter.min.js"></script>
-<script type="text/javascript" src="${prfx}js/ppap.js"></script>
+<link rel="stylesheet" href="${prefix}css/main.css" type="text/css" media="all" />
+<script type="text/javascript" src="${prefix}js/jquery-1.4.2.min.js"></script>
+<script type="text/javascript" src="${prefix}js/jquery.tablesorter.min.js"></script>
+<script type="text/javascript" src="${prefix}js/ppap.js"></script>
 </head>
 <body>
 END_HEADER
