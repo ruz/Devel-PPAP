@@ -367,12 +367,13 @@ sub report {
 }
 
 sub pp_reports {
-    foreach my $op ( sort keys %{ $results{'ops'} } ) {
+    foreach my $op ( qw(or push shift) ) { #sort keys %{ $results{'ops'} } ) {
         my $fh = new_file('pp', $op .'.html');
 
-        out_head($fh, "$op specific usage stats");
+        out_head($fh, "$op specific usage stats", '../');
         my $func = 'out_pp_'.$op.'_usage';
         if ( defined &{$func} ) {
+            no strict 'refs';
             &{$func}($fh);
         } else {
             out_pp_generic_usage($fh, $op);
@@ -434,6 +435,13 @@ sub out_pp_generic_usage {
     out_pp_context($out, $op);
 }
 
+sub out_pp_push_usage {
+    my ($op, $out) = ('push', @_);
+    out_pp_context($out, $op);
+    out_variable_arg_size($out, $op);
+    out_array_sufix_size($out, $op);
+}
+
 sub out_pp_usage {
     my ($out, $results) = (@_);
     my $total = 0;
@@ -479,8 +487,8 @@ sub out_pp_context {
         $out,
         title => 'Context',
         elements => [ sort keys %{ $stats{'counter'} } ],
-        columns  => [qw(context count % time % ratio)],
-        type     => [qw(string counter percent time percent num)],
+        columns  => [qw(context count % time % mean ratio)],
+        type     => [qw(string counter percent time percent num num)],
         callback => sub {
             my $ctx = shift;
             my $count_perc = (100*$stats{'counter'}{$ctx})/$results{'ops'}{$op};
@@ -489,6 +497,96 @@ sub out_pp_context {
                 $ctx,
                 $stats{'counter'}{$ctx}, $count_perc,
                 $stats{'time'}{$ctx}, $time_perc,
+                $stats{'time'}{$ctx}/$stats{'counter'}{$ctx},
+                ($time_perc/$count_perc),
+            ];
+        },
+    );
+}
+
+sub out_variable_arg_size {
+    my $out = shift;
+    my $op = shift;
+
+    my %stats  = ();
+    walk_report( sub {
+        my ($ctx,$lval,$rop,$args,$time) = @_;
+        return unless $rop eq $op;
+        return unless $args =~ /\.\.\.([0-9]+)$/;
+
+        $stats{'counter'}{$1}++;
+        $stats{'time'}{$1} += $time;
+    } );
+
+    render_table(
+        $out,
+        title => 'Variable argument size',
+        elements => [ sort keys %{ $stats{'counter'} } ],
+        columns  => [qw(size count % time % mean mean/elements ratio)],
+        type     => [qw(counter counter percent time percent num num num)],
+        callback => sub {
+            my $ctx = shift;
+            my $count_perc = (100*$stats{'counter'}{$ctx})/$results{'ops'}{$op};
+            my $time_perc = (100*$stats{'time'}{$ctx})/$results{'time'}{$op};
+            return [
+                $ctx,
+                $stats{'counter'}{$ctx}, $count_perc,
+                $stats{'time'}{$ctx}, $time_perc,
+                $stats{'time'}{$ctx}/$stats{'counter'}{$ctx},
+                $ctx? $stats{'time'}{$ctx}/$stats{'counter'}{$ctx}/$ctx : 0.0,
+                ($time_perc/$count_perc),
+            ];
+        },
+    );
+}
+
+sub out_array_sufix_size {
+    my $out = shift;
+    my $op = shift;
+
+    my %stats  = ();
+    walk_report( sub {
+        my ($ctx,$lval,$rop,$args,$time) = @_;
+        return unless $rop eq $op;
+        return unless $args =~ /\.\.\.([0-9]+)$/;
+        my $list_size = $1;
+
+        return unless $args =~ /([0-9]+)-([0-9]+)-([0-9]+)/;
+        my ($prefix, $array_size, $sufix) = ($1, $2, $3);
+
+        my $type = undef;
+        unless ( $list_size ) {
+            $type = 'no argument';
+        } elsif ( !$prefix && !$array_size && !$sufix ) {
+            $type = 'empty array';
+        } elsif ( $sufix >= $list_size ) {
+            $type = 'sufix fits';
+        } elsif ( ($sufix+$prefix) >= $list_size ) {
+            $type = 'prefix+sufix fits';
+        } else {
+            $type = 'no space';
+        }
+        $stats{'counter'}{$type}++;
+        $stats{'time'}{$type} += $time;
+        $stats{'size'}{$type} += $list_size;
+    } );
+
+    render_table(
+        $out,
+        title => 'Suffix size',
+        elements => [ sort keys %{ $stats{'counter'} } ],
+        columns  => [qw(status count % time % mean mean/elements ratio)],
+        type     => [qw(string counter percent time percent num num num)],
+        callback => sub {
+            my $ctx = shift;
+            my $count_perc = (100*$stats{'counter'}{$ctx})/$results{'ops'}{$op};
+            my $time_perc = (100*$stats{'time'}{$ctx})/$results{'time'}{$op};
+            return [
+                $ctx,
+                $stats{'counter'}{$ctx}, $count_perc,
+                $stats{'time'}{$ctx}, $time_perc,
+                $stats{'time'}{$ctx}/$stats{'counter'}{$ctx},
+                $stats{'size'}{$ctx}? $stats{'time'}{$ctx}/$stats{'counter'}{$ctx}/$stats{'size'}{$ctx} : 0.0,
                 ($time_perc/$count_perc),
             ];
         },
@@ -803,15 +901,16 @@ sub calc_fractiles {
 sub out_head {
     my $out = shift;
     my $title = shift;
+    my $prfx = shift || '';
     print $out '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"'
         .' "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">', "\n";
-    print $out "<html>\n<head>\n";
-    print $out "<title>$title</title>\n";
-    print $out '<link rel="stylesheet" href="css/main.css" type="text/css" media="all" />', "\n";
-    print $out '<script type="text/javascript" src="js/jquery-1.4.2.min.js"></script>', "\n";
-    print $out '<script type="text/javascript" src="js/jquery.tablesorter.min.js"></script>', "\n";
-    print $out '<script type="text/javascript" src="js/ppap.js"></script>', "\n";
-    print $out "</head>\n<body>\n";
+    print $out qq{<html>\n<head>\n};
+    print $out qq{<title>$title</title>\n};
+    print $out qq'<link rel="stylesheet" href="${prfx}/css/main.css" type="text/css" media="all" />', "\n";
+    print $out qq'<script type="text/javascript" src="${prfx}js/jquery-1.4.2.min.js"></script>', "\n";
+    print $out qq'<script type="text/javascript" src="${prfx}js/jquery.tablesorter.min.js"></script>', "\n";
+    print $out qq'<script type="text/javascript" src="${prfx}js/ppap.js"></script>', "\n";
+    print $out qq'</head>\n<body>\n';
 }
 
 sub out_footer {
