@@ -385,17 +385,27 @@ sub pp_reports {
     }
 }
 
+# Обработать отчёт ppap.out
+# $cb - callback, которому передаются параметры отпарсенной строки
 sub walk_report {
     my $cb = shift;
     open my $fh, '<:utf8', 'ppap.out';
     while ( my $str = <$fh> ) {
         chomp($str);
-        unless ( $str =~ /^([-\$\@?])(=?)\s(\w+)\s*(.*)\s+\|([0-9]+)$/ ) {
+        my ($ctx,$lval,$rop,$args,$time) = $str =~ /^ 
+            ([-\$\@?])      # контекст ('-' - void, '$' - scalar, '@' - array, '?' - хз)
+            (=?)    \s      # lvalue ли это
+            (\w+)   \s*     # имя оператора
+            (.*)    \s+     # аргументы (требует доп. парсинга)
+            \|([0-9]+)      # время выполнения, отделенное знаком |
+        $/x;
+
+        unless ( $time ) {
             warn "String '$str' is not parsable";
             next;
         }
 
-        $cb->($1, $2, $3, $4, $5);
+        $cb->($ctx, $lval, $rop, $args, $time);
     }
     close $fh;
 }
