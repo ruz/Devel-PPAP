@@ -353,6 +353,7 @@ prepare_report_dir();
 report();
 exit 0;
 
+# Вывести отчёт в html-файл
 sub report {
     my $fh = new_file('index.html');
     out_head($fh, 'PP op codes access patterns');
@@ -898,6 +899,7 @@ sub calc_fractiles {
     return \%res;
 }
 
+# Вывод заголовка HTML-страницы
 sub out_head {
     my $out = shift;
     my $title = shift;
@@ -914,11 +916,13 @@ sub out_head {
     print $out qq'</head>\n<body>\n';
 }
 
+# Вывод футера
 sub out_footer {
     my $out = shift;
     print $out "</body></html>\n";
 }
 
+# Создание каталога с HTML-отчетом
 sub prepare_report_dir {
     foreach my $n (qw(css js)) {
         my $src = File::Spec->catfile( dist_dir('Devel-PPAP'), $n, '*' );
