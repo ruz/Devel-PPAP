@@ -344,7 +344,8 @@ my %results = (
 
 # PP reporters hash
 my %PP_REPORTER_FOR = (
-    push => \&out_pp_push_usage,
+    push   => \&out_pp_push_usage,
+    substr => \&out_pp_substr_usage,
 );
 
 
@@ -370,7 +371,7 @@ sub report {
     out_footer($fh);
     close $fh;
 
-    pp_report($_) for qw( or push shift ); # sort keys %{ $results{'ops'} }
+    pp_report($_) for qw( or push shift substr ); # sort keys %{ $results{'ops'} }
 }
 
 # Generate report for specific operator
@@ -455,6 +456,12 @@ sub out_pp_push_usage {
     out_array_sufix_size($out, $op);
 }
 
+sub out_pp_substr_usage {
+    my ($op, $out) = ('substr', @_);
+    out_pp_context($out, $op);
+    out_substr_arg_count($out, $op);
+}
+
 sub out_pp_usage {
     my ($out, $results) = (@_);
     my $total = 0;
@@ -515,6 +522,53 @@ sub out_pp_context {
             ];
         },
     );
+}
+
+sub out_substr_arg_count {
+    my $out = shift;
+    my $op = shift;
+
+    my %stats  = ();
+    walk_report( sub {
+        my ($ctx,$lval,$rop,$args,$time) = @_;
+        return unless $rop eq $op;
+		my @temp_args = split(/, /, $args);
+		my $args_count = @temp_args;
+
+        my $type = undef;
+        if ( $args_count == 2 ) {
+		    $type = 'substr EXPR,OFFSET';
+        } elsif ( $args_count == 3 ) {
+		    $type = 'substr EXPR,OFFSET,LENGTH';
+        } elsif ( $args_count == 4 ) {
+		    $type = 'substr EXPR,OFFSET,LENGTH,REPLACEMENT';
+		} else {
+		    $type = 'Am I error?';
+		}
+        $stats{'counter'}{$type}++;
+        $stats{'time'}{$type} += $time;
+    } );
+
+    render_table(
+        $out,
+        title => 'Substr argument count',
+        elements => [ sort keys %{ $stats{'counter'} } ],
+        columns  => [qw(type count % time % mean ratio)],
+        type     => [qw(string counter percent time percent num num)],
+        callback => sub {
+            my $ctx = shift;
+            my $count_perc = (100*$stats{'counter'}{$ctx})/$results{'ops'}{$op};
+            my $time_perc = (100*$stats{'time'}{$ctx})/$results{'time'}{$op};
+            return [
+                $ctx,
+                $stats{'counter'}{$ctx}, $count_perc,
+                $stats{'time'}{$ctx}, $time_perc,
+                $stats{'time'}{$ctx}/$stats{'counter'}{$ctx},
+                ($time_perc/$count_perc),
+            ];
+        },
+    );
+
 }
 
 sub out_variable_arg_size {

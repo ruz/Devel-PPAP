@@ -455,6 +455,49 @@ type_to_name(int type)
 }
 
 void
+describe_string(pTHX_ const SV* const sv) {
+    I32 prefix, size, sufix;
+	IV res = 0;
+
+    if (SvGAMAGIC(sv)) {
+        /* For an overloaded or magic scalar, we can't know in advance if
+           it's going to be UTF-8 or not. Also, we can't call sv_len_utf8 as
+           it likes to cache the length. Maybe that should be a documented
+           feature of it.
+        */
+
+/* XXX Why we need declarate this? include sv.h */
+#define SV_UNDEF_RETURNS_NULL	2048
+#define SV_CONST_RETURN		32
+#define SV_GMAGIC		2
+
+        STRLEN len;
+        const char *const p
+            = sv_2pv_flags(sv, &len,
+                           SV_UNDEF_RETURNS_NULL|SV_CONST_RETURN|SV_GMAGIC);
+
+        if (!p)
+            res = 0;
+        else if (DO_UTF8(sv)) {
+            res = utf8_length((U8*)p, (U8*)p + len);
+        }
+        else
+            res = len;
+    } else if (SvOK(sv)) {
+        /* Neither magic nor overloaded.  */
+        if (DO_UTF8(sv))
+            res = sv_len_utf8(sv);
+        else
+            res = sv_len(sv);
+    } else {
+        res = 0;
+    }
+
+    fprintf(out, "$%i", res);
+
+}
+
+void
 describe_array(pTHX_ const AV* const av) {
     I32 prefix, size, sufix;
 
@@ -486,6 +529,28 @@ pp_stmt_handle_push(pTHX)
     fprintf(out, "%s push ", cur_op_context());
     describe_array(aTHX_ (AV *)(*(MARK+1)) );
     fprintf(out, ", ...%"IVdf, SP-MARK-1);
+
+    run_original_op(PL_op->op_type);
+}
+
+static OP *
+pp_stmt_handle_substr(pTHX)
+{
+    dSP; sMARK;
+    I32 nargs = SP-MARK-1;
+
+    fprintf(out, "%s substr ", cur_op_context());
+    describe_string(aTHX_ (*(MARK+1)) );
+    if ( nargs-- > 0 ) {
+        fprintf(out, ", %"IVdf, SvIV(*(SP-nargs)));
+    }
+    if ( nargs-- > 0 ) {
+        fprintf(out, ", %"IVdf, SvIV(*(SP-nargs)));
+    }
+    if ( nargs-- > 0 ) {
+        fprintf(out, ", ");
+        describe_string(aTHX_ (*(SP-nargs)) );
+    }
 
     run_original_op(PL_op->op_type);
 }
@@ -623,6 +688,7 @@ init_handler(pTHX)
     PL_ppaddr[OP_PUSH]       = pp_stmt_handle_push;
     PL_ppaddr[OP_SHIFT]      = pp_stmt_handle_shift;
     PL_ppaddr[OP_UNSHIFT]    = pp_stmt_handle_unshift;
+    PL_ppaddr[OP_SUBSTR]     = pp_stmt_handle_substr;
 
     PL_ppaddr[OP_SPLICE]     = pp_stmt_handle_splice;
 
