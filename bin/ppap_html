@@ -913,17 +913,21 @@ sub calc_fractiles {
 sub out_head {
     my $out = shift;
     my $title = shift;
-    my $prfx = shift;
-    if (!$prfx) {$prfx = ''}
-    print $out '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"'
-        .' "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">', "\n";
-    print $out qq{<html>\n<head>\n};
-    print $out qq{<title>$title</title>\n};
-    print $out qq'<link rel="stylesheet" href="${prfx}css/main.css" type="text/css" media="all" />', "\n";
-    print $out qq'<script type="text/javascript" src="${prfx}js/jquery-1.4.2.min.js"></script>', "\n";
-    print $out qq'<script type="text/javascript" src="${prfx}js/jquery.tablesorter.min.js"></script>', "\n";
-    print $out qq'<script type="text/javascript" src="${prfx}js/ppap.js"></script>', "\n";
-    print $out qq'</head>\n<body>\n';
+    my $prfx = shift || '';
+
+    print $out <<"END_HEADER";
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html>
+<head>
+<title>$title</title>
+<link rel="stylesheet" href="${prfx}css/main.css" type="text/css" media="all" />
+<script type="text/javascript" src="${prfx}js/jquery-1.4.2.min.js"></script>
+<script type="text/javascript" src="${prfx}js/jquery.tablesorter.min.js"></script>
+<script type="text/javascript" src="${prfx}js/ppap.js"></script>
+</head>
+<body>
+END_HEADER
+
 }
 
 # Вывод футера
