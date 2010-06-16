@@ -339,8 +339,12 @@ my %OP_GROUP = (
     CUSTOM => '',
 );
 
-my %results = (
-);
+my $dbh = report2db();
+
+my %results = %{ $dbh->selectall_hashref(
+    'SELECT name, COUNT(1) AS counter, SUM(time) AS time FROM calls GROUP BY name',
+    'name', undef
+) };
 
 # PP reporters hash
 my %PP_REPORTER_FOR = (
@@ -349,14 +353,8 @@ my %PP_REPORTER_FOR = (
 );
 
 
-walk_report( sub {
-    my ($ctx,$lval,$op,$args,$time) = @_;
-    $results{'ops'}{$op}++;
-    $results{'time'}{$op} += $time;
-} );
 
 prepare_report_dir();
-
 report();
 exit 0;
 
@@ -371,7 +369,7 @@ sub report {
     out_footer($fh);
     close $fh;
 
-    pp_report($_) for qw( or push shift substr ); # sort keys %{ $results{'ops'} }
+    pp_report($_) for sort keys %$results;
 }
 
 # Generate report for specific operator
@@ -419,12 +417,12 @@ sub out_groupped_usage {
     my ($tcount, $ttime) = (0, 0);
 
     my %grps = ();
-    while ( my ($op, $count) = each %{ $results->{'ops'} } ) {
-        $grps{ $OP_GROUP{uc $op} || 'other' }{'count'} += $count;
-        $tcount += $count;
+    while ( my ($op, $info) = each %$results ) {
+        $grps{ $OP_GROUP{uc $op} || 'other' }{'count'} += $info->{'counter'};
+        $tcount += $info->{'counter'};
 
-        $grps{ $OP_GROUP{uc $op} || 'other' }{'time'} += $results->{'time'}{$op};
-        $ttime += $results->{'time'}{$op}
+        $grps{ $OP_GROUP{uc $op} || 'other' }{'time'} += $info->{'time'};
+        $ttime += $info->{'time'};
     }
 
     render_table(
@@ -465,25 +463,25 @@ sub out_pp_substr_usage {
 sub out_pp_usage {
     my ($out, $results) = (@_);
     my $total = 0;
-    $total += $_ foreach values %{ $results->{'ops'} };
+    $total += $_ foreach map $_->{'counter'}, values %$results;
     my $ttime = 0;
-    $ttime += $_ foreach values %{ $results->{'time'} };
+    $ttime += $_ foreach map $_->{'time'}, values %$results;
 
     render_table(
         $out,
         title => 'PPs usage',
-        elements => [ sort keys %{ $results->{'ops'} } ],
+        elements => [ sort keys %$results ],
         columns  => [qw(PP group count % time % mean ratio)],
         type     => [qw(string string counter percent time percent num num)],
         callback => sub {
             my $op = shift;
-            my $count_perc = (100*$results->{'ops'}{$op})/$total;
-            my $time_perc = (100*$results->{'time'}{$op})/$ttime;
+            my $count_perc = (100*$results->{$op}{'counter'})/$total;
+            my $time_perc = (100*$results->{$op}{'time'})/$ttime;
             return [
                 "<a href='pp/$op.html'>$op</a>", $OP_GROUP{uc $op} || 'other',
-                $results->{'ops'}{$op}, $count_perc,
-                $results->{'time'}{$op}, $time_perc,
-                $results->{'time'}{$op}/$results->{'ops'}{$op},
+                $results->{$op}{'counter'}, $count_perc,
+                $results->{$op}{'time'}, $time_perc,
+                $results->{$op}{'time'}/$results->{$op}{'counter'},
                 ($time_perc/$count_perc),
             ];
         },
@@ -494,30 +492,26 @@ sub out_pp_context {
     my $out = shift;
     my $op = shift;
 
-    my %stats  = ();
-    walk_report( sub {
-        my ($ctx,$lval,$rop,$args,$time) = @_;
-        return unless $rop eq $op;
-
-        $stats{'counter'}{$ctx}++;
-        $stats{'time'}{$ctx} += $time;
-    } );
+    my $stats = $dbh->selectall_hashref(
+        'SELECT context, COUNT(1) AS counter, SUM(time) AS time FROM calls WHERE name = ? GROUP BY context',
+        'context', undef, $op
+    );
 
     render_table(
         $out,
         title => 'Context',
-        elements => [ sort keys %{ $stats{'counter'} } ],
+        elements => [ sort keys %$stats ],
         columns  => [qw(context count % time % mean ratio)],
         type     => [qw(string counter percent time percent num num)],
         callback => sub {
             my $ctx = shift;
-            my $count_perc = (100*$stats{'counter'}{$ctx})/$results{'ops'}{$op};
-            my $time_perc = (100*$stats{'time'}{$ctx})/$results{'time'}{$op};
+            my $count_perc = (100*$stats->{$ctx}{'counter'})/$results{$op}{'counter'};
+            my $time_perc = (100*$stats->{$ctx}{'time'})/$results{$op}{'time'};
             return [
                 $ctx,
-                $stats{'counter'}{$ctx}, $count_perc,
-                $stats{'time'}{$ctx}, $time_perc,
-                $stats{'time'}{$ctx}/$stats{'counter'}{$ctx},
+                $stats->{$ctx}{'counter'}, $count_perc,
+                $stats->{$ctx}{'time'}, $time_perc,
+                $stats->{$ctx}{'time'}/$stats->{$ctx}{'counter'},
                 ($time_perc/$count_perc),
             ];
         },
@@ -575,32 +569,28 @@ sub out_variable_arg_size {
     my $out = shift;
     my $op = shift;
 
-    my %stats  = ();
-    walk_report( sub {
-        my ($ctx,$lval,$rop,$args,$time) = @_;
-        return unless $rop eq $op;
-        return unless $args =~ /\.\.\.([0-9]+)$/;
-
-        $stats{'counter'}{$1}++;
-        $stats{'time'}{$1} += $time;
-    } );
-
+    my $stats = $dbh->selectall_hashref(
+        'SELECT v.size AS size, COUNT(1) AS counter, SUM(c.time) AS time'
+        .' FROM varargs v JOIN calls c ON v.call = c.id'
+        .' WHERE c.name = ? GROUP BY v.size',
+        'size', undef, $op
+    );
     render_table(
         $out,
         title => 'Variable argument size',
-        elements => [ sort keys %{ $stats{'counter'} } ],
+        elements => [ sort keys %$stats ],
         columns  => [qw(size count % time % mean mean/elements ratio)],
         type     => [qw(counter counter percent time percent num num num)],
         callback => sub {
             my $ctx = shift;
-            my $count_perc = (100*$stats{'counter'}{$ctx})/$results{'ops'}{$op};
-            my $time_perc = (100*$stats{'time'}{$ctx})/$results{'time'}{$op};
+            my $count_perc = (100*$stats->{$ctx}{'counter'})/$results{$op}{'counter'};
+            my $time_perc = (100*$stats->{$ctx}{'time'})/$results{$op}{'time'};
             return [
                 $ctx,
-                $stats{'counter'}{$ctx}, $count_perc,
-                $stats{'time'}{$ctx}, $time_perc,
-                $stats{'time'}{$ctx}/$stats{'counter'}{$ctx},
-                $ctx? $stats{'time'}{$ctx}/$stats{'counter'}{$ctx}/$ctx : 0.0,
+                $stats->{$ctx}{'counter'}, $count_perc,
+                $stats->{$ctx}{'time'}, $time_perc,
+                $stats->{$ctx}{'time'}/$stats->{$ctx}{'counter'},
+                $ctx? $stats->{$ctx}{'time'}/$stats->{$ctx}{'counter'}/$ctx : 0.0,
                 ($time_perc/$count_perc),
             ];
         },
@@ -611,49 +601,58 @@ sub out_array_sufix_size {
     my $out = shift;
     my $op = shift;
 
-    my %stats  = ();
-    walk_report( sub {
-        my ($ctx,$lval,$rop,$args,$time) = @_;
-        return unless $rop eq $op;
-        return unless $args =~ /\.\.\.([0-9]+)$/;
-        my $list_size = $1;
+    return unless $results{$op}{'counter'};
 
-        return unless $args =~ /([0-9]+)-([0-9]+)-([0-9]+)/;
-        my ($prefix, $array_size, $sufix) = ($1, $2, $3);
+    my %stats = ();
 
-        my $type = undef;
-        unless ( $list_size ) {
-            $type = 'no argument';
-        } elsif ( !$prefix && !$array_size && !$sufix ) {
-            $type = 'empty array';
-        } elsif ( $sufix >= $list_size ) {
-            $type = 'sufix fits';
-        } elsif ( ($sufix+$prefix) >= $list_size ) {
-            $type = 'prefix+sufix fits';
-        } else {
-            $type = 'no space';
-        }
-        $stats{'counter'}{$type}++;
-        $stats{'time'}{$type} += $time;
-        $stats{'size'}{$type} += $list_size;
-    } );
+    my $base_query = 'SELECT COUNT(a.id), SUM(a.time) FROM arrays a JOIN calls c ON a.call = c.id WHERE c.name = ?';
+
+    my $dbh = create_database();
+    @{ $stats{'no argument'} ||={} }{'counter', 'time', 'size'} = $dbh->selectrow_array( <<END, undef, $op );
+SELECT COUNT(a.call), SUM(a.time), SUM(va.size) FROM calls c JOIN arrays a ON a.call = c.id JOIN varargs va ON va.call = c.id
+WHERE c.name = ? AND va.size = 0
+END
+
+    @{ $stats{'empty array'} ||={} }{'counter', 'time', 'size'} = $dbh->selectrow_array( <<END, undef, $op );
+SELECT COUNT(a.call), SUM(a.time), SUM(va.size) FROM calls c JOIN arrays a ON a.call = c.id JOIN varargs va ON va.call = c.id
+WHERE c.name = ? AND va.size != 0 AND a.prefix = 0 AND a.size = 0 AND a.suffix = 0
+END
+    
+    @{ $stats{'suffix fits'} ||={} }{'counter', 'time', 'size'} = $dbh->selectrow_array( <<END, undef, $op );
+SELECT COUNT(a.call), SUM(a.time), SUM(va.size) FROM calls c JOIN arrays a ON a.call = c.id JOIN varargs va ON va.call = c.id
+WHERE c.name = ? AND va.size != 0 AND NOT(a.prefix = 0 AND a.size = 0 AND a.suffix = 0)
+    AND a.suffix >= va.size
+END
+
+    @{ $stats{'prefix+suffix fits'} ||={} }{'counter', 'time', 'size'} = $dbh->selectrow_array( <<END, undef, $op );
+SELECT COUNT(a.call), SUM(a.time), SUM(va.size) FROM calls c JOIN arrays a ON a.call = c.id JOIN varargs va ON va.call = c.id
+WHERE c.name = ? AND va.size != 0 AND NOT (a.prefix = 0 AND a.size = 0 AND a.suffix = 0)
+    AND a.suffix < va.size AND a.suffix + a.prefix >= va.size
+END
+
+    @{ $stats{'no space'} ||={} }{'counter', 'time', 'size'} = $dbh->selectrow_array( <<END, undef, $op );
+SELECT COUNT(a.call), SUM(a.time), SUM(va.size) FROM calls c JOIN arrays a ON a.call = c.id JOIN varargs va ON va.call = c.id
+WHERE c.name = ? AND va.size != 0 AND NOT (a.prefix = 0 AND a.size = 0 AND a.suffix = 0)
+    AND suffix < va.size AND suffix + prefix < va.size
+END
 
     render_table(
         $out,
         title => 'Suffix size',
-        elements => [ sort keys %{ $stats{'counter'} } ],
+        elements => ['no argument', 'empty array', 'suffix fits', 'prefix+suffix fits', 'no space' ],
         columns  => [qw(status count % time % mean mean/elements ratio)],
         type     => [qw(string counter percent time percent num num num)],
         callback => sub {
             my $ctx = shift;
-            my $count_perc = (100*$stats{'counter'}{$ctx})/$results{'ops'}{$op};
-            my $time_perc = (100*$stats{'time'}{$ctx})/$results{'time'}{$op};
+            return [ $ctx, ('')x7 ] unless $stats{$ctx}{'counter'};
+            my $count_perc = (100*$stats{$ctx}{'counter'})/$results{$op}{'counter'};
+            my $time_perc = (100*$stats{$ctx}{'time'})/$results{$op}{'time'};
             return [
                 $ctx,
-                $stats{'counter'}{$ctx}, $count_perc,
-                $stats{'time'}{$ctx}, $time_perc,
-                $stats{'time'}{$ctx}/$stats{'counter'}{$ctx},
-                $stats{'size'}{$ctx}? $stats{'time'}{$ctx}/$stats{'counter'}{$ctx}/$stats{'size'}{$ctx} : 0.0,
+                $stats{$ctx}{'counter'}, $count_perc,
+                $stats{$ctx}{'time'}, $time_perc,
+                $stats{$ctx}{'time'}/$stats{$ctx}{'counter'},
+                $stats{$ctx}{'size'}? $stats{$ctx}{'time'}/$stats{$ctx}{'counter'}/$stats{$ctx}{'size'} : 0.0,
                 ($time_perc/$count_perc),
             ];
         },
