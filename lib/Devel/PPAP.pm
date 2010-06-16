@@ -64,15 +64,6 @@ sure it's possible to implement. You can uncomment two lines
 in C<describe_array> function in PPAP.xs to see a warning when
 an array with more than 1000 elements is used in executed code.
 
-=head1 CAVEATS AND KNOW ISSUES
-
-=head2 Compilation fail on anything, but MacOS
-
-No detection of supported clocks. Comment the following line
-in PPAP.xs
-
-    #define HAS_MACH_TIME
-
 =cut
 
 init_handler();

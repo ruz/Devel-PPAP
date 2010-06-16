@@ -9,8 +9,6 @@
 
 */
 
-#define HAS_MACH_TIME
-
 #ifdef HAS_CLOCK_GETTIME
 typedef struct timespec time_of_day_t;
 #  define CLOCK_GETTIME(ts) clock_gettime(profile_clock, ts)
