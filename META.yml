@@ -19,6 +19,7 @@ no_index:
     - inc
     - share
 requires:
+  DBD::SQLite: 0
   File::Spec: 0
   XSLoader: 0
   autodie: 0
