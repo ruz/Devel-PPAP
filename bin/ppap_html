@@ -1012,3 +1012,87 @@ sub new_file {
     return $fh;
 }
 
+sub report2db {
+    my $dbh = create_database();
+    import_database();
+    create_database_indexes();
+    return $dbh;
+}
+
+sub import_database {
+    my $dbh = create_database();
+
+    my $id = 1;
+    my $sth_calls = $dbh->prepare('INSERT INTO calls(id, name, context, lvalue, time) VALUES(?, ?, ?, ?, ?)');
+    my $sth_arrays = $dbh->prepare('INSERT INTO arrays VALUES(?, ?, ?, ?, ?, ?)');
+    my $sth_varargs = $dbh->prepare('INSERT INTO varargs VALUES(?, ?)');
+    walk_report( sub {
+        my ($ctx, $lval, $op, $args, $time) = @_;
+        $sth_calls->execute($id, $op, $ctx, $lval ? 1 : 0, $time);
+
+        # XXX: multiple arrays in one op?
+        if ( $args =~ /\@_?\(0x([0-9a-f]+)\)([0-9]+)-([0-9]+)-([0-9]+)/ ) {
+            $sth_arrays->execute( $id, $1, $2, $3, $4, $time );
+        }
+        if ( $args =~ /\.\.\.([0-9])$/ ) {
+            $sth_varargs->execute( $id, $1 );
+        }
+        $dbh->commit if $id%5000 == 0;
+        $id++;
+    } );
+}
+
+sub create_database_indexes {
+    my $dbh = create_database();
+
+    $dbh->do('CREATE INDEX calls1 ON calls(name)');
+    $dbh->do('CREATE INDEX arrays1 ON arrays(call)');
+    $dbh->do('CREATE INDEX varargs1 ON varargs(call)');
+}
+
+{ my $dbh;
+sub create_database {
+    return $dbh if $dbh;
+
+    require DBI;
+    my $name = 'ppap.db';
+    { local $@; eval { unlink $name }; }
+    $dbh = DBI->connect(
+        'dbi:SQLite:'. $name, undef, undef,
+        { AutoCommit => 0 }
+    ) or die "Couldn't create DB";
+
+    $dbh->do('PRAGMA synchronous = 0');
+
+    $dbh->do( <<END ) or die $dbh->errstr;
+CREATE TABLE calls(
+    id integer not null,
+    name varchar(32) not null,
+    context char(1),
+    lvalue tinyint not null default 0,
+    time int
+)
+END
+
+    $dbh->do( <<END ) or die $dbh->errstr;
+CREATE TABLE arrays(
+    call int not null,
+    address char(16) not null,
+    prefix int not null default 0,
+    size   int not null,
+    suffix int not null default 0,
+    time int
+)
+END
+
+    $dbh->do( <<END ) or die $dbh->errstr;
+CREATE TABLE varargs(
+    call int not null,
+    size int
+)
+END
+    return $dbh;
+} }
+
+BEGIN { $SIG{'INT'} = sub { require Carp; print STDERR Carp::longmess('Killed'); exit 1 }; }
+
