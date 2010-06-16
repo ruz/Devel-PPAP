@@ -526,19 +526,19 @@ sub out_substr_arg_count {
     walk_report( sub {
         my ($ctx,$lval,$rop,$args,$time) = @_;
         return unless $rop eq $op;
-		my @temp_args = split(/, /, $args);
-		my $args_count = @temp_args;
+        my @temp_args = split(/, /, $args);
+        my $args_count = @temp_args;
 
         my $type = undef;
         if ( $args_count == 2 ) {
-		    $type = 'substr EXPR,OFFSET';
+            $type = 'substr EXPR,OFFSET';
         } elsif ( $args_count == 3 ) {
-		    $type = 'substr EXPR,OFFSET,LENGTH';
+            $type = 'substr EXPR,OFFSET,LENGTH';
         } elsif ( $args_count == 4 ) {
-		    $type = 'substr EXPR,OFFSET,LENGTH,REPLACEMENT';
-		} else {
-		    $type = 'Am I error?';
-		}
+            $type = 'substr EXPR,OFFSET,LENGTH,REPLACEMENT';
+        } else {
+            $type = 'Am I error?';
+        }
         $stats{'counter'}{$type}++;
         $stats{'time'}{$type} += $time;
     } );
@@ -562,7 +562,6 @@ sub out_substr_arg_count {
             ];
         },
     );
-
 }
 
 sub out_variable_arg_size {
