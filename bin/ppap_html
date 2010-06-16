@@ -369,7 +369,7 @@ sub report {
     out_footer($fh);
     close $fh;
 
-    pp_report($_) for sort keys %$results;
+    pp_report($_) for sort keys %results;
 }
 
 # Generate report for specific operator
