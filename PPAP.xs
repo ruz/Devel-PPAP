@@ -501,6 +501,7 @@ describe_array(pTHX_ const AV* const av) {
 
     if ( SvTIED_mg((const SV *)av, PERL_MAGIC_tied) ) {
         fprintf(out, "@T");
+        return;
     }
 
     size = AvFILLp(av);
