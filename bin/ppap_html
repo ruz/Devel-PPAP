@@ -551,8 +551,8 @@ sub out_substr_arg_count {
         type     => [qw(string counter percent time percent num num)],
         callback => sub {
             my $ctx = shift;
-            my $count_perc = (100*$stats{'counter'}{$ctx})/$results{'ops'}{$op};
-            my $time_perc = (100*$stats{'time'}{$ctx})/$results{'time'}{$op};
+            my $count_perc = (100*$stats{'counter'}{$ctx})/$results{$op}{'counter'};
+            my $time_perc = (100*$stats{'time'}{$ctx})/$results{$op}{'time'};
             return [
                 $ctx,
                 $stats{'counter'}{$ctx}, $count_perc,
