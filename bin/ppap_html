@@ -397,13 +397,13 @@ sub walk_report {
         chomp($str);
         my ($ctx,$lval,$rop,$args,$time) = $str =~ /^ 
             ([-\$\@?])      # контекст ('-' - void, '$' - scalar, '@' - array, '?' - хз)
-            (=?)    \s      # lvalue ли это
+            (=?)    \s+     # lvalue ли это
             (\w+)   \s*     # имя оператора
-            (.*)    \s+     # аргументы (требует доп. парсинга)
+            (.*?)   \s*     # аргументы (требует доп. парсинга)
             \|([0-9]+)      # время выполнения, отделенное знаком |
         $/x;
 
-        unless ( $time ) {
+        unless ( $ctx ) {
             warn "String '$str' is not parsable";
             next;
         }
