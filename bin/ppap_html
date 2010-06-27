@@ -451,7 +451,8 @@ sub out_pp_push_usage {
     my ($op, $out) = ('push', @_);
     out_pp_context($out, $op);
     out_variable_arg_size($out, $op);
-    out_array_sufix_size($out, $op);
+    out_array_sufix_size_table($out, $op);
+    out_array_sufix_size_graph($out, $op);
 }
 
 sub out_pp_substr_usage {
@@ -596,7 +597,7 @@ sub out_variable_arg_size {
     );
 }
 
-sub out_array_sufix_size {
+sub out_array_sufix_size_table {
     my $out = shift;
     my $op = shift;
 
@@ -608,31 +609,41 @@ sub out_array_sufix_size {
 
     my $dbh = create_database();
     @{ $stats{'no argument'} ||={} }{'counter', 'time', 'size'} = $dbh->selectrow_array( <<END, undef, $op );
-SELECT COUNT(a.call), SUM(a.time), SUM(va.size) FROM calls c JOIN arrays a ON a.call = c.id JOIN varargs va ON va.call = c.id
+SELECT COUNT(a.call), SUM(a.time), SUM(va.size)
+FROM calls c JOIN arrays a ON a.call = c.id JOIN varargs va ON va.call = c.id
 WHERE c.name = ? AND va.size = 0
 END
 
     @{ $stats{'empty array'} ||={} }{'counter', 'time', 'size'} = $dbh->selectrow_array( <<END, undef, $op );
-SELECT COUNT(a.call), SUM(a.time), SUM(va.size) FROM calls c JOIN arrays a ON a.call = c.id JOIN varargs va ON va.call = c.id
-WHERE c.name = ? AND va.size != 0 AND a.prefix = 0 AND a.size = 0 AND a.suffix = 0
+SELECT COUNT(a.call), SUM(a.time), SUM(va.size)
+FROM calls c JOIN arrays a ON a.call = c.id JOIN varargs va ON va.call = c.id
+WHERE c.name = ? AND va.size != 0
+    AND a.prefix = 0 AND a.size = 0 AND a.suffix = 0
 END
-    
+
     @{ $stats{'suffix fits'} ||={} }{'counter', 'time', 'size'} = $dbh->selectrow_array( <<END, undef, $op );
 SELECT COUNT(a.call), SUM(a.time), SUM(va.size) FROM calls c JOIN arrays a ON a.call = c.id JOIN varargs va ON va.call = c.id
-WHERE c.name = ? AND va.size != 0 AND NOT(a.prefix = 0 AND a.size = 0 AND a.suffix = 0)
+WHERE c.name = ? AND va.size != 0
+    AND NOT(a.prefix = 0 AND a.size = 0 AND a.suffix = 0)
     AND a.suffix >= va.size
 END
 
     @{ $stats{'prefix+suffix fits'} ||={} }{'counter', 'time', 'size'} = $dbh->selectrow_array( <<END, undef, $op );
-SELECT COUNT(a.call), SUM(a.time), SUM(va.size) FROM calls c JOIN arrays a ON a.call = c.id JOIN varargs va ON va.call = c.id
-WHERE c.name = ? AND va.size != 0 AND NOT (a.prefix = 0 AND a.size = 0 AND a.suffix = 0)
-    AND a.suffix < va.size AND a.suffix + a.prefix >= va.size
+SELECT COUNT(a.call), SUM(a.time), SUM(va.size)
+FROM calls c JOIN arrays a ON a.call = c.id JOIN varargs va ON va.call = c.id
+WHERE c.name = ? AND va.size != 0
+    AND NOT (a.prefix = 0 AND a.size = 0 AND a.suffix = 0)
+    AND a.suffix < va.size
+    AND a.suffix + a.prefix >= va.size
 END
 
     @{ $stats{'no space'} ||={} }{'counter', 'time', 'size'} = $dbh->selectrow_array( <<END, undef, $op );
-SELECT COUNT(a.call), SUM(a.time), SUM(va.size) FROM calls c JOIN arrays a ON a.call = c.id JOIN varargs va ON va.call = c.id
-WHERE c.name = ? AND va.size != 0 AND NOT (a.prefix = 0 AND a.size = 0 AND a.suffix = 0)
-    AND suffix < va.size AND suffix + prefix < va.size
+SELECT COUNT(a.call), SUM(a.time), SUM(va.size)
+FROM calls c JOIN arrays a ON a.call = c.id JOIN varargs va ON va.call = c.id
+WHERE c.name = ? AND va.size != 0
+    AND NOT (a.prefix = 0 AND a.size = 0 AND a.suffix = 0)
+    AND suffix < va.size
+    AND suffix + prefix < va.size
 END
 
     render_table(
@@ -656,6 +667,98 @@ END
             ];
         },
     );
+}
+
+sub out_array_sufix_size_graph {
+    my $out = shift;
+    my $op = shift;
+
+    return unless $results{$op}{'counter'};
+
+    my $gid = $op .'_array_sufix_size_graph';
+
+    my $dbh = create_database();
+    my ($base_line) = $dbh->selectrow_array( <<END, undef, $op );
+SELECT AVG(c.time) FROM calls c JOIN varargs va ON va.call = c.id
+WHERE c.name = ? AND va.size = 0
+END
+
+    my @data;
+    push @data, $dbh->selectall_arrayref( <<END, undef, $op );
+SELECT va.size, AVG(c.time)
+FROM calls c JOIN arrays a ON a.call = c.id JOIN varargs va ON va.call = c.id
+WHERE c.name = ? AND va.size != 0
+    AND a.prefix = 0 AND a.size = 0 AND a.suffix = 0
+GROUP BY va.size
+END
+
+    push @data, $dbh->selectall_arrayref( <<END, undef, $op );
+SELECT va.size, AVG(c.time)
+FROM calls c JOIN arrays a ON a.call = c.id JOIN varargs va ON va.call = c.id
+WHERE c.name = ? AND va.size != 0
+    AND NOT(a.prefix = 0 AND a.size = 0 AND a.suffix = 0)
+    AND a.suffix >= va.size
+GROUP BY va.size
+END
+
+    push @data, $dbh->selectall_arrayref( <<END, undef, $op );
+SELECT va.size, AVG(c.time)
+FROM calls c JOIN arrays a ON a.call = c.id JOIN varargs va ON va.call = c.id
+WHERE c.name = ? AND va.size != 0
+    AND NOT (a.prefix = 0 AND a.size = 0 AND a.suffix = 0)
+    AND a.suffix < va.size
+    AND a.suffix + a.prefix >= va.size
+GROUP BY va.size
+END
+
+    push @data, $dbh->selectall_arrayref( <<END, undef, $op );
+SELECT va.size, AVG(c.time)
+FROM calls c JOIN arrays a ON a.call = c.id JOIN varargs va ON va.call = c.id
+WHERE c.name = ? AND va.size != 0
+    AND NOT (a.prefix = 0 AND a.size = 0 AND a.suffix = 0)
+    AND suffix < va.size
+    AND suffix + prefix < va.size
+GROUP BY va.size
+END
+
+    my @js_data;
+    push @js_data, '['. join( ', ', map "[$_]", map join(', ', @$_), @$_ ) .']'
+        foreach @data;
+
+    print $out <<END;
+<script>
+jQuery(document).ready(function() {
+    \$.plot(\$("#$gid"), [
+        {
+            data: $js_data[0],
+            label: "empty array",
+            lines: { show: true },
+            points: { show: true },
+        },
+        {
+            data: $js_data[1],
+            label: "suffix fits",
+            lines: { show: true },
+            points: { show: true },
+        },
+        {
+            data: $js_data[2],
+            label: "prefix+suffix fits",
+            lines: { show: true },
+            points: { show: true },
+        },
+        {
+            data: $js_data[3],
+            label: "no space",
+            lines: { show: true },
+            points: { show: true },
+        },
+    ]);
+});
+</script>
+<div id="$gid" style="width:600px;height:450px;"></div>
+END
+
 }
 
 sub render_table {
@@ -977,6 +1080,8 @@ sub out_head {
 <link rel="stylesheet" href="${prefix}css/main.css" type="text/css" media="all" />
 <script type="text/javascript" src="${prefix}js/jquery-1.4.2.min.js"></script>
 <script type="text/javascript" src="${prefix}js/jquery.tablesorter.min.js"></script>
+<!--[if IE]><script language="javascript" type="text/javascript" src="${prefix}js/excanvas.pack.js"></script><![endif]-->
+<script type="text/javascript" src="${prefix}js/jquery.flot.min.js"></script>
 <script type="text/javascript" src="${prefix}js/ppap.js"></script>
 </head>
 <body>
