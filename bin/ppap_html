@@ -1151,6 +1151,7 @@ sub create_database_indexes {
     $dbh->do('CREATE INDEX calls1 ON calls(name)');
     $dbh->do('CREATE INDEX arrays1 ON arrays(call)');
     $dbh->do('CREATE INDEX varargs1 ON varargs(call)');
+    $dbh->commit;
 }
 
 { my $dbh;
