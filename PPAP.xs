@@ -687,7 +687,7 @@ init_handler(pTHX)
     PL_ppaddr[OP_PUSH]       = pp_stmt_handle_push;
     PL_ppaddr[OP_SHIFT]      = pp_stmt_handle_shift;
     PL_ppaddr[OP_UNSHIFT]    = pp_stmt_handle_unshift;
-    PL_ppaddr[OP_SUBSTR]     = pp_stmt_handle_substr;
+//    PL_ppaddr[OP_SUBSTR]     = pp_stmt_handle_substr;
 
     PL_ppaddr[OP_SPLICE]     = pp_stmt_handle_splice;
 
