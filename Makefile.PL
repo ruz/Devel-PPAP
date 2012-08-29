@@ -11,6 +11,8 @@ requires 'File::Spec';
 requires 'XSLoader';
 requires 'DBD::SQLite';
 
+makemaker_args( OPTIMIZE => '-g'  );
+
 print "Looking for header files and functions...\n";
 my @h_dirs =  grep { -d $_ } qw(/include /usr/include /usr/local/include /usr/include/mach);
 my $h_files = find_h_files(@h_dirs);
