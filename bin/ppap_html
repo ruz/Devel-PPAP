@@ -8,6 +8,7 @@ use File::Spec;
 use File::ShareDir qw(dist_dir);
 use File::Path qw(make_path);
 use File::Copy qw(copy);
+use DBI;
 
 my %OP_GROUP = (
     WANTARRAY => '',
@@ -610,7 +611,7 @@ sub out_array_sufix_size_table {
 
     my $base_query = 'SELECT COUNT(a.id), SUM(a.time) FROM arrays a JOIN calls c ON a.call = c.id WHERE c.name = ?';
 
-    my $dbh = create_database();
+    my $dbh = connect_database();
     @{ $stats{'no argument'} ||={} }{'counter', 'time', 'size'} = $dbh->selectrow_array( <<END, undef, $op );
 SELECT COUNT(a.call), SUM(a.time), SUM(va.size)
 FROM calls c JOIN arrays a ON a.call = c.id JOIN varargs va ON va.call = c.id
@@ -680,7 +681,7 @@ sub out_array_sufix_size_graph {
 
     my $gid = $op .'_array_sufix_size_graph';
 
-    my $dbh = create_database();
+    my $dbh = connect_database();
     my ($base_line) = $dbh->selectrow_array( <<END, undef, $op );
 SELECT AVG(c.time) FROM calls c JOIN varargs va ON va.call = c.id
 WHERE c.name = ? AND va.size = 0
@@ -1119,14 +1120,17 @@ sub new_file {
 }
 
 sub report2db {
-    my $dbh = create_database();
-    import_database();
-    create_database_indexes();
+    my $dbh = connect_database();
+    unless ($dbh) {
+        create_database();
+        import_database();
+        create_database_indexes();
+    }
     return $dbh;
 }
 
 sub import_database {
-    my $dbh = create_database();
+    my $dbh = connect_database();
 
     my $id = 1;
     my $sth_calls = $dbh->prepare('INSERT INTO calls(id, name, context, lvalue, time) VALUES(?, ?, ?, ?, ?)');
@@ -1149,7 +1153,7 @@ sub import_database {
 }
 
 sub create_database_indexes {
-    my $dbh = create_database();
+    my $dbh = connect_database();
 
     $dbh->do('CREATE INDEX calls1 ON calls(name)');
     $dbh->do('CREATE INDEX arrays1 ON arrays(call)');
@@ -1157,14 +1161,10 @@ sub create_database_indexes {
     $dbh->commit;
 }
 
-{ my $dbh;
 sub create_database {
-    return $dbh if $dbh;
-
-    require DBI;
     my $name = 'ppap.db';
     { local $@; eval { unlink $name }; }
-    $dbh = DBI->connect(
+    my $dbh = DBI->connect(
         'dbi:SQLite:'. $name, undef, undef,
         { AutoCommit => 0 }
     ) or die "Couldn't create DB";
@@ -1199,6 +1199,19 @@ CREATE TABLE varargs(
 )
 END
     return $dbh;
+}
+
+{ my $dbh;
+sub connect_database {
+    return $dbh if $dbh;
+
+    my $name = 'ppap.db';
+    return unless -e $name;
+
+    return $dbh = DBI->connect(
+        'dbi:SQLite:'. $name, undef, undef,
+        { AutoCommit => 0 }
+    ) or die "Couldn't open DB";
 } }
 
 BEGIN { $SIG{'INT'} = sub { require Carp; print STDERR Carp::longmess('Killed'); exit 1 }; }
