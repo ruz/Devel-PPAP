@@ -24,7 +24,7 @@ requires:
   File::Spec: 0
   XSLoader: 0
   autodie: 0
-  perl: 5.8.8
+  perl: 5.16.0
 resources:
   license: http://dev.perl.org/licenses/
 version: 0.01
