@@ -507,7 +507,10 @@ sub out_pp_context {
         callback => sub {
             my $ctx = shift;
             my $count_perc = (100*$stats->{$ctx}{'counter'})/$results{$op}{'counter'};
-            my $time_perc = (100*$stats->{$ctx}{'time'})/$results{$op}{'time'};
+            my $time_perc = $results{$op}{'time'}
+                ? (100*$stats->{$ctx}{'time'})/$results{$op}{'time'}
+                : 0
+            ;
             return [
                 $ctx,
                 $stats->{$ctx}{'counter'}, $count_perc,
