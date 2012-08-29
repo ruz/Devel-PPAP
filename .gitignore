@@ -1,8 +1,9 @@
 Makefile
-Makefile.old
-MANIFEST.bak
+*.old
+*.bak
 pm_to_blib
 blib/
-PPAP.o
+*.o
+*.bs
 PPAP.c
-PPAP.bs
+MYMETA.*
