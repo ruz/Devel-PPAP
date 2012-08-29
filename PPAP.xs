@@ -564,7 +564,10 @@ pp_stmt_handle_shift(pTHX)
     } else {
         fprintf(out, "%s pop ", cur_op_context());
     }
-    describe_array(aTHX_ (AV *)(TOPs) );
+    describe_array(aTHX_
+        PL_op->op_flags & OPf_SPECIAL
+        ? GvAV(PL_defgv) : (AV *)(TOPs)
+    );
 
     run_original_op(PL_op->op_type);
 }
@@ -633,11 +636,11 @@ pp_stmt_handle_aelemfast(pTHX)
     }
     fprintf(out, " aelemfast ");
 
-    if ( PL_op->op_flags & OPf_SPECIAL ) {
+    if ( PL_op->op_type == OP_AELEMFAST_LEX ) {
         describe_array(aTHX_ PAD_SV(PL_op->op_targ) );
     } else {
         // XXX: how safe is this?
-        describe_array(aTHX_ GvAV(cGVOP_gv) );
+        describe_array(aTHX_ GvAVn(cGVOP_gv) );
     }
 
     fprintf(out, ", %"IVdf, (IV) PL_op->op_private);
