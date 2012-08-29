@@ -459,7 +459,7 @@ sub out_pp_push_usage {
 sub out_pp_substr_usage {
     my ($op, $out) = ('substr', @_);
     out_pp_context($out, $op);
-    out_substr_arg_count($out, $op);
+    #out_substr_arg_count($out, $op);
 }
 
 sub out_pp_usage {
