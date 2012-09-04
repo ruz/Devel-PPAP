@@ -1224,7 +1224,7 @@ sub connect_database {
 
     return $dbh = DBI->connect(
         'dbi:SQLite:'. $name, undef, undef,
-        { AutoCommit => 0 }
+        { AutoCommit => 0, RaiseError => 1, }
     ) or die "Couldn't open DB";
 } }
 
