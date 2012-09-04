@@ -437,19 +437,14 @@ cur_op_context()
     }
 }
 
-static char*
-type_to_name(int type)
-{
-    int context = OP_GIMME(PL_op, 0);
-    if ( context == G_SCALAR ) {
-        return "$";
-    } else if ( context == G_ARRAY ) {
-        return "@";
-    } else if ( context == G_VOID ) {
-        return "-";
-    } else {
-        return "?";
-    }
+static void
+output_op_leader() {
+    fprintf(
+        out, "%s%s %s",
+        cur_op_context(),
+        PL_op->op_flags & OPf_MOD? "=": "",
+        OP_NAME(PL_op)
+    );
 }
 
 void
@@ -525,7 +520,7 @@ pp_stmt_handle_push(pTHX)
 {
     dSP; sMARK;
 
-    fprintf(out, "%s push ", cur_op_context());
+    output_op_leader();
     describe_array(aTHX_ (AV *)(*(MARK+1)) );
     fprintf(out, ", ...%"IVdf, SP-MARK-1);
 
@@ -538,7 +533,7 @@ pp_stmt_handle_substr(pTHX)
     dSP; sMARK;
     I32 nargs = SP-MARK-1;
 
-    fprintf(out, "%s substr ", cur_op_context());
+    output_op_leader();
     describe_string(aTHX_ (*(MARK+1)) );
     if ( nargs-- > 0 ) {
         fprintf(out, ", %"IVdf, SvIV(*(SP-nargs)));
@@ -559,11 +554,7 @@ pp_stmt_handle_shift(pTHX)
 {
     dSP; sMARK;
 
-    if ( PL_op->op_type == OP_SHIFT ) {
-        fprintf(out, "%s shift ", cur_op_context());
-    } else {
-        fprintf(out, "%s pop ", cur_op_context());
-    }
+    output_op_leader();
     describe_array(aTHX_
         PL_op->op_flags & OPf_SPECIAL
         ? GvAV(PL_defgv) : (AV *)(TOPs)
@@ -577,7 +568,7 @@ pp_stmt_handle_unshift(pTHX)
 {
     dSP; sMARK;
 
-    fprintf(out, "%s unshift ", cur_op_context());
+    output_op_leader();
     describe_array(aTHX_ (AV*)*(MARK+1) );
     fprintf(out, ", ...%"IVdf, (IV)(SP-MARK-1));
 
@@ -590,7 +581,7 @@ pp_stmt_handle_splice(pTHX)
     dSP; sMARK;
     I32 nargs = SP-MARK-1;
 
-    fprintf(out, "%s splice ", cur_op_context());
+    output_op_leader();
     describe_array(aTHX_ (AV *)(*(MARK+1)) );
 
     if ( nargs-- > 0 ) {
@@ -611,12 +602,7 @@ pp_stmt_handle_aelem(pTHX)
 {
     dSP; sMARK;
 
-    fprintf(out, "%s", cur_op_context());
-    if ( PL_op->op_flags & OPf_MOD ) {
-        fprintf(out, "=");
-    }
-    fprintf(out, " aelem ");
-
+    output_op_leader();
     if ( SP-MARK > 1 ) { /* XXX: handle shift @_ */
         describe_array(aTHX_ (AV *)TOPm1s );
         fprintf(out, ", %"IVdf, (IV)SvIV(TOPs));
@@ -630,12 +616,7 @@ pp_stmt_handle_aelemfast(pTHX)
 {
     dSP; sMARK;
 
-    fprintf(out, "%s", cur_op_context());
-    if ( PL_op->op_flags & OPf_MOD ) {
-        fprintf(out, "=");
-    }
-    fprintf(out, " aelemfast ");
-
+    output_op_leader();
     if ( PL_op->op_type == OP_AELEMFAST_LEX ) {
         describe_array(aTHX_ PAD_SV(PL_op->op_targ) );
     } else {
@@ -653,12 +634,7 @@ pp_stmt_handle_sassign(pTHX)
 {
     dSP; sMARK;
 
-    fprintf(out, "%s", cur_op_context());
-    if ( PL_op->op_flags & OPf_MOD ) {
-        fprintf(out, "=");
-    }
-    fprintf(out, " sassign");
-
+    output_op_leader();
     run_original_op(PL_op->op_type);
 }
 
@@ -666,13 +642,7 @@ static OP *
 pp_stmt_handle_simple(pTHX)
 {
     dSP; sMARK;
-    fprintf(
-        out, "%s%s %s",
-        cur_op_context(),
-        PL_op->op_flags & OPf_MOD? "=": "",
-        OP_NAME(PL_op)
-    );
-
+    output_op_leader();
     run_original_op(PL_op->op_type);
 }
 
