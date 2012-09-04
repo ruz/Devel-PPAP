@@ -1138,6 +1138,7 @@ sub report2db {
         create_database();
         import_database();
         create_database_indexes();
+        $dbh = connect_database();
     }
     return $dbh;
 }
@@ -1211,7 +1212,7 @@ CREATE TABLE varargs(
     size int
 )
 END
-    return $dbh;
+    $dbh->commit;
 }
 
 { my $dbh;
