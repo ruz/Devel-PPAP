@@ -506,7 +506,9 @@ sub out_pp_context {
     my $op = shift;
 
     my $stats = $dbh->selectall_hashref(
-        'SELECT context, COUNT(1) AS counter, SUM(time) AS time FROM calls WHERE name = ? GROUP BY context',
+        'SELECT case when lvalue < 1 then context else context || "=" end AS context,'
+        .' COUNT(1) AS counter, SUM(time) AS time FROM calls WHERE name = ?'
+        .' GROUP BY context, lvalue',
         'context', undef, $op
     );
 
