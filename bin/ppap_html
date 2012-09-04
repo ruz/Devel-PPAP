@@ -341,10 +341,20 @@ my %OP_GROUP = (
     CUSTOM => '',
 );
 
+my @IGNORE = ();
+foreach my $group (qw(IO FS)) {
+    push @IGNORE, grep $OP_GROUP{$_} eq $group, keys %OP_GROUP;
+}
+$_ = lc $_ foreach @IGNORE;
+
+say "Ignoring ". join ', ', @IGNORE;
+
 my $dbh = report2db();
 
 my %results = %{ $dbh->selectall_hashref(
-    'SELECT name, COUNT(1) AS counter, SUM(time) AS time FROM calls GROUP BY name',
+    'SELECT name, COUNT(1) AS counter, SUM(time) AS time FROM calls'
+    .' WHERE name NOT IN ('. join(', ', map "'$_'", @IGNORE) .')'
+    .' GROUP BY name',
     'name', undef
 ) };
 
