@@ -1147,12 +1147,12 @@ sub import_database {
     my $dbh = connect_database();
 
     my $id = 1;
-    my $sth_calls = $dbh->prepare('INSERT INTO calls(id, name, context, lvalue, time) VALUES(?, ?, ?, ?, ?)');
+    my $sth_calls = $dbh->prepare('INSERT INTO calls(id, name, context, lvalue, arguments, time) VALUES(?, ?, ?, ?, ?, ?)');
     my $sth_arrays = $dbh->prepare('INSERT INTO arrays VALUES(?, ?, ?, ?, ?, ?)');
     my $sth_varargs = $dbh->prepare('INSERT INTO varargs VALUES(?, ?)');
     walk_report( sub {
         my ($ctx, $lval, $op, $args, $time) = @_;
-        $sth_calls->execute($id, $op, $ctx, $lval ? 1 : 0, $time);
+        $sth_calls->execute($id, $op, $ctx, $lval ? 1 : 0, $args, $time);
 
         # XXX: multiple arrays in one op?
         if ( $args =~ /\@_?\(0x([0-9a-f]+)\)([0-9]+)-([0-9]+)-([0-9]+)/ ) {
@@ -1191,6 +1191,7 @@ CREATE TABLE calls(
     name varchar(32) not null,
     context char(1),
     lvalue tinyint not null default 0,
+    arguments text,
     time int
 )
 END
