@@ -459,6 +459,13 @@ sub out_pp_generic_usage {
     out_pp_context($out, $op);
 }
 
+sub out_pp_aassign_usage {
+    my ($out, $op) = (@_);
+    out_pp_context($out, $op);
+    out_variable_arg_size($out, $op);
+    out_lhs_arg_type_size($out, $op);
+}
+
 sub out_pp_push_usage {
     my ($out, $op) = (@_);
     out_pp_context($out, $op);
@@ -609,6 +616,50 @@ sub out_variable_arg_size {
                 $stats->{$ctx}{'time'}/$stats->{$ctx}{'counter'},
                 $ctx? $stats->{$ctx}{'time'}/$stats->{$ctx}{'counter'}/$ctx : 0.0,
                 ($time_perc/$count_perc),
+            ];
+        },
+    );
+}
+
+sub out_lhs_arg_type_size {
+    my $out = shift;
+    my $op = shift;
+
+    my $stats = $dbh->selectall_hashref(
+        'SELECT c.arguments AS arguments, COUNT(1) AS counter, SUM(c.time) AS time'
+        .' FROM calls c'
+        .' WHERE c.name = ? GROUP BY c.arguments',
+        'arguments', undef, $op
+    );
+    foreach my $args ( keys %$stats ) {
+        my @args = grep $_, split /\s*,\s*/, $args;
+        my ($rhs) = (pop(@args) =~ /\s*[.]{3}\s*(\d+)/);
+        my %tmp;
+        $tmp{$_}++ foreach @args;
+        my $key = join ' ', map "${_}x$tmp{$_}", grep $tmp{$_}, qw($ % @);
+        $stats->{ $key } ||= { counter => 0, time => 0, elements => 0 };
+        $stats->{ $key }{'elements'} += $rhs;
+        $stats->{ $key }{ $_ } += $stats->{ $args }{ $_ }
+            foreach qw(counter time);
+        delete $stats->{$args};
+    }
+    render_table(
+        $out,
+        title => 'Left hand side arguments',
+        elements => [ sort keys %$stats ],
+        columns  => [qw(signature count % time % mean elements mean/elements)],
+        type     => [qw(string counter percent time percent num counter num)],
+        callback => sub {
+            my $ctx = shift;
+            my $line = $stats->{ $ctx };
+            my $count_perc = (100*$line->{'counter'})/$results{$op}{'counter'};
+            my $time_perc = (100*$line->{'time'})/$results{$op}{'time'};
+            return [
+                $ctx,
+                $line->{'counter'}, $count_perc,
+                $line->{'time'}, $time_perc,
+                ($time_perc/$count_perc),
+                $line->{'elements'}, $line->{'elements'}? $line->{'time'}/$line->{'elements'} : '-',
             ];
         },
     );
