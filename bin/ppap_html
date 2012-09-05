@@ -349,8 +349,10 @@ $_ = lc $_ foreach @IGNORE;
 
 say "Ignoring ". join ', ', @IGNORE;
 
+say "Looking for or building DB";
 my $dbh = report2db();
 
+say "Calculating overall stats";
 my %results = %{ $dbh->selectall_hashref(
     'SELECT name, COUNT(1) AS counter, SUM(time) AS time FROM calls'
     .' WHERE name NOT IN ('. join(', ', map "'$_'", @IGNORE) .')'
@@ -372,6 +374,7 @@ exit 0;
 
 # Вывести отчёт в html-файл
 sub report {
+    say "Generating index";
     my $fh = new_file('index.html');
     out_head($fh, 'PP op codes access patterns');
     out_groupped_usage($fh, \%results);
@@ -387,6 +390,7 @@ sub report {
 # Generate report for specific operator
 sub pp_report {
     my $op = shift;
+    say "Generating report for $op";
 
     # Find specific 'reporter' function or use default one
     my $reporter = $PP_REPORTER_FOR{$op} || \&out_pp_generic_usage;
