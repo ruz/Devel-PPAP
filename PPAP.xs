@@ -630,6 +630,35 @@ pp_stmt_handle_aelemfast(pTHX)
 }
 
 static OP *
+pp_stmt_handle_aassign(pTHX)
+{
+    dVAR; dSP;
+    SV **lastlelem = PL_stack_sp;
+    SV **lastrelem = PL_stack_base + TOPMARK;
+    SV **firstrelem = PL_stack_base + *(PL_markstack_ptr-1) + 1;
+    SV **firstlelem = lastrelem + 1;
+
+    output_op_leader();
+    while (firstlelem <= lastlelem) {
+        switch (SvTYPE(*firstlelem)) {
+        case SVt_PVAV:
+            fprintf(out, ", @");
+            break;
+        case SVt_PVHV:
+            fprintf(out, ", %%");
+            break;
+        default:
+            fprintf(out, ", $");
+            break;
+        }
+        firstlelem++;
+    }
+    fprintf(out, ", ...%"IVdf, lastrelem - firstrelem + 1);
+
+    run_original_op(PL_op->op_type);
+}
+
+static OP *
 pp_stmt_handle_sassign(pTHX)
 {
     dSP; sMARK;
@@ -653,6 +682,7 @@ init_handler(pTHX)
     Newxc(PL_ppaddr_orig, OP_max, void *, orig_ppaddr_t);
     Copy(PL_ppaddr, PL_ppaddr_orig, OP_max, void *);
 
+    PL_ppaddr[OP_AASSIGN]    = pp_stmt_handle_aassign;
     PL_ppaddr[OP_AELEM]      = pp_stmt_handle_aelem;
     PL_ppaddr[OP_AELEMFAST]  = pp_stmt_handle_aelemfast;
 
