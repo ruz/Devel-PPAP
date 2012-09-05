@@ -360,13 +360,6 @@ my %results = %{ $dbh->selectall_hashref(
     'name', undef
 ) };
 
-# PP reporters hash
-my %PP_REPORTER_FOR = (
-    push   => \&out_pp_push_usage,
-    substr => \&out_pp_substr_usage,
-);
-
-
 
 prepare_report_dir();
 report();
@@ -393,7 +386,10 @@ sub pp_report {
     say "Generating report for $op";
 
     # Find specific 'reporter' function or use default one
-    my $reporter = $PP_REPORTER_FOR{$op} || \&out_pp_generic_usage;
+    my $reporter = do {
+        no strict 'refs';
+        defined &{"out_pp_${op}_usage"} ? \&{"out_pp_${op}_usage"} : undef
+    } || \&out_pp_generic_usage;
 
     my $fh = new_file('pp', "$op.html");
     out_head($fh, "$op specific usage stats", '../');
