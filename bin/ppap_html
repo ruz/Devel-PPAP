@@ -460,7 +460,7 @@ sub out_pp_generic_usage {
 }
 
 sub out_pp_push_usage {
-    my ($op, $out) = ('push', @_);
+    my ($out, $op) = (@_);
     out_pp_context($out, $op);
     out_variable_arg_size($out, $op);
     out_array_sufix_size_table($out, $op);
@@ -468,7 +468,7 @@ sub out_pp_push_usage {
 }
 
 sub out_pp_substr_usage {
-    my ($op, $out) = ('substr', @_);
+    my ($out, $op) = (@_);
     out_pp_context($out, $op);
     #out_substr_arg_count($out, $op);
 }
