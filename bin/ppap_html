@@ -1095,9 +1095,9 @@ sub out_head {
 <head>
 <title>$title</title>
 <link rel="stylesheet" href="${prefix}css/main.css" type="text/css" media="all" />
-<script type="text/javascript" src="${prefix}js/jquery-1.4.2.min.js"></script>
+<script type="text/javascript" src="${prefix}js/jquery.min.js"></script>
 <script type="text/javascript" src="${prefix}js/jquery.tablesorter.min.js"></script>
-<!--[if IE]><script language="javascript" type="text/javascript" src="${prefix}js/excanvas.pack.js"></script><![endif]-->
+<!--[if IE]><script language="javascript" type="text/javascript" src="${prefix}js/excanvas.min.js"></script><![endif]-->
 <script type="text/javascript" src="${prefix}js/jquery.flot.min.js"></script>
 <script type="text/javascript" src="${prefix}js/ppap.js"></script>
 </head>

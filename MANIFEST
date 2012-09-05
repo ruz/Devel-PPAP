@@ -21,7 +21,7 @@ samples/shift_push_sequence.pl
 samples/unshift_sequence.pl
 share/css/main.css
 share/js/excanvas.min.js
-share/js/jquery-1.4.2.min.js
+share/js/jquery.min.js
 share/js/jquery.flot.min.js
 share/js/jquery.tablesorter.min.js
 share/js/ppap.js
