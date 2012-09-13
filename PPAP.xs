@@ -706,15 +706,6 @@ pp_stmt_handle_aassign(pTHX)
 }
 
 static OP *
-pp_stmt_handle_sassign(pTHX)
-{
-    dSP; sMARK;
-
-    output_op_leader();
-    run_original_op(PL_op->op_type);
-}
-
-static OP *
 pp_stmt_handle_simple(pTHX)
 {
     dSP; sMARK;
