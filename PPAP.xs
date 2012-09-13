@@ -497,7 +497,7 @@ output_op_leader() {
 void
 describe_string(pTHX_ const SV* const sv) {
     I32 prefix, size, sufix;
-	IV res = 0;
+        IV res = 0;
 
     if (SvGAMAGIC(sv)) {
         /* For an overloaded or magic scalar, we can't know in advance if
@@ -507,9 +507,9 @@ describe_string(pTHX_ const SV* const sv) {
         */
 
 /* XXX Why we need declarate this? include sv.h */
-#define SV_UNDEF_RETURNS_NULL	2048
-#define SV_CONST_RETURN		32
-#define SV_GMAGIC		2
+#define SV_UNDEF_RETURNS_NULL   2048
+#define SV_CONST_RETURN         32
+#define SV_GMAGIC               2
 
         STRLEN len;
         const char *const p
