@@ -677,6 +677,26 @@ pp_stmt_handle_aelemfast(pTHX)
 }
 
 static OP *
+pp_stmt_handle_method(pTHX)
+{
+    dSP;
+
+    output_op_leader();
+    fprintf(out, ", %s", SvPV_nolen_const(TOPs));
+    run_original_op(PL_op->op_type);
+}
+
+static OP *
+pp_stmt_handle_method_named(pTHX)
+{
+    dSP;
+
+    output_op_leader();
+    fprintf(out, ", %s", SvPV_nolen_const(cSVOP_sv));
+    run_original_op(PL_op->op_type);
+}
+
+static OP *
 pp_stmt_handle_aassign(pTHX)
 {
     dVAR; dSP;
@@ -723,6 +743,9 @@ init_handler(pTHX)
     PL_ppaddr[OP_AASSIGN]    = pp_stmt_handle_aassign;
     PL_ppaddr[OP_AELEM]      = pp_stmt_handle_aelem;
     PL_ppaddr[OP_AELEMFAST]  = pp_stmt_handle_aelemfast;
+
+    PL_ppaddr[OP_METHOD]     = pp_stmt_handle_method;
+    PL_ppaddr[OP_METHOD_NAMED]     = pp_stmt_handle_method_named;
 
     PL_ppaddr[OP_POP]        = pp_stmt_handle_shift;
     PL_ppaddr[OP_PUSH]       = pp_stmt_handle_push;

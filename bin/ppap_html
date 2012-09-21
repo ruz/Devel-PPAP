@@ -468,6 +468,13 @@ sub out_pp_aassign_usage {
     out_lhs_arg_type_size($out, $op);
 }
 
+sub out_pp_method_usage {
+    my ($out, $op) = (@_);
+    out_pp_context($out, $op);
+    out_arguments($out, $op);
+}
+sub out_pp_method_named_usage { out_pp_method_usage(@_) }
+
 sub out_pp_push_usage {
     my ($out, $op) = (@_);
     out_pp_context($out, $op);
@@ -662,6 +669,37 @@ sub out_lhs_arg_type_size {
                 $line->{'time'}, $time_perc,
                 ($time_perc/$count_perc),
                 $line->{'elements'}, $line->{'elements'}? $line->{'time'}/$line->{'elements'} : '-',
+            ];
+        },
+    );
+}
+
+sub out_arguments {
+    my $out = shift;
+    my $op = shift;
+
+    my $stats = $dbh->selectall_hashref(
+        'SELECT c.arguments AS arguments, COUNT(1) AS counter, SUM(c.time) AS time'
+        .' FROM calls c'
+        .' WHERE c.name = ? GROUP BY c.arguments',
+        'arguments', undef, $op
+    );
+    render_table(
+        $out,
+        title => 'Argument(s)',
+        elements => [ sort keys %$stats ],
+        columns  => [qw(value count % time % mean)],
+        type     => [qw(string counter percent time percent num)],
+        callback => sub {
+            my $ctx = shift;
+            my $line = $stats->{ $ctx };
+            my $count_perc = (100*$line->{'counter'})/$results{$op}{'counter'};
+            my $time_perc = (100*$line->{'time'})/$results{$op}{'time'};
+            return [
+                $ctx,
+                $line->{'counter'}, $count_perc,
+                $line->{'time'}, $time_perc,
+                ($time_perc/$count_perc),
             ];
         },
     );
