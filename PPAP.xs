@@ -5,8 +5,9 @@
 #include "clock.h"
 
 typedef OP * (CPERLscope(*orig_ppaddr_t))(pTHX);
+typedef void (CPERLscope(*void_ppaddr_t))(pTHX);
 orig_ppaddr_t *PL_ppaddr_orig;
-orig_ppaddr_t *PL_ppaddr_mine;
+void_ppaddr_t *PL_ppaddr_mine;
 #define run_original_op(type) STMT_START { \
     OP* rv; long elapsed, overflow; \
     get_time_of_day(start_time); \
@@ -505,25 +506,21 @@ describe_array(pTHX_ const AV* const av) {
 
 }
 
-static OP *
+static void
 pp_stmt_handle_push(pTHX)
 {
     dSP; sMARK;
 
-    output_op_leader();
     describe_array(aTHX_ (AV *)(*(MARK+1)) );
     fprintf(out, ", ...%"IVdf, SP-MARK-1);
-
-    run_original_op(PL_op->op_type);
 }
 
-static OP *
+static void
 pp_stmt_handle_substr(pTHX)
 {
     dSP; sMARK;
     I32 nargs = SP-MARK-1;
 
-    output_op_leader();
     describe_string(aTHX_ (*(MARK+1)) );
     if ( nargs-- > 0 ) {
         fprintf(out, ", %"IVdf, SvIV(*(SP-nargs)));
@@ -535,43 +532,32 @@ pp_stmt_handle_substr(pTHX)
         fprintf(out, ", ");
         describe_string(aTHX_ (*(SP-nargs)) );
     }
-
-    run_original_op(PL_op->op_type);
 }
 
-static OP *
+static void
 pp_stmt_handle_shift(pTHX)
 {
     dSP; sMARK;
-
-    output_op_leader();
     describe_array(aTHX_
         PL_op->op_flags & OPf_SPECIAL
         ? GvAV(PL_defgv) : (AV *)(TOPs)
     );
-
-    run_original_op(PL_op->op_type);
 }
 
-static OP *
+static void
 pp_stmt_handle_unshift(pTHX)
 {
     dSP; sMARK;
-
-    output_op_leader();
     describe_array(aTHX_ (AV*)*(MARK+1) );
     fprintf(out, ", ...%"IVdf, (IV)(SP-MARK-1));
-
-    run_original_op(PL_op->op_type);
 }
 
-static OP *
+static void
 pp_stmt_handle_splice(pTHX)
 {
     dSP; sMARK;
     I32 nargs = SP-MARK-1;
 
-    output_op_leader();
     describe_array(aTHX_ (AV *)(*(MARK+1)) );
 
     if ( nargs-- > 0 ) {
@@ -583,30 +569,24 @@ pp_stmt_handle_splice(pTHX)
     if ( nargs > 0 ) {
         fprintf(out, ", ...%"IVdf, nargs);
     }
-
-    run_original_op(PL_op->op_type);
 }
 
-static OP *
+static void
 pp_stmt_handle_aelem(pTHX)
 {
     dSP; sMARK;
 
-    output_op_leader();
     if ( SP-MARK > 1 ) { /* XXX: handle shift @_ */
         describe_array(aTHX_ (AV *)TOPm1s );
         fprintf(out, ", %"IVdf, (IV)SvIV(TOPs));
     }
-
-    run_original_op(PL_op->op_type);
 }
 
-static OP *
+static void
 pp_stmt_handle_aelemfast(pTHX)
 {
     dSP; sMARK;
 
-    output_op_leader();
     if ( PL_op->op_type == OP_AELEMFAST_LEX ) {
         describe_array(aTHX_ PAD_SV(PL_op->op_targ) );
     } else {
@@ -615,31 +595,23 @@ pp_stmt_handle_aelemfast(pTHX)
     }
 
     fprintf(out, ", %"IVdf, (IV) PL_op->op_private);
-
-    run_original_op(PL_op->op_type);
 }
 
-static OP *
+static void
 pp_stmt_handle_method(pTHX)
 {
     dSP;
-
-    output_op_leader();
     fprintf(out, ", %s", SvPV_nolen_const(TOPs));
-    run_original_op(PL_op->op_type);
 }
 
-static OP *
+static void
 pp_stmt_handle_method_named(pTHX)
 {
     dSP;
-
-    output_op_leader();
     fprintf(out, ", %s", SvPV_nolen_const(cSVOP_sv));
-    run_original_op(PL_op->op_type);
 }
 
-static OP *
+static void
 pp_stmt_handle_aassign(pTHX)
 {
     dVAR; dSP;
@@ -648,7 +620,6 @@ pp_stmt_handle_aassign(pTHX)
     SV **firstrelem = PL_stack_base + *(PL_markstack_ptr-1) + 1;
     SV **firstlelem = lastrelem + 1;
 
-    output_op_leader();
     while (firstlelem <= lastlelem) {
         switch (SvTYPE(*firstlelem)) {
         case SVt_PVAV:
@@ -664,16 +635,6 @@ pp_stmt_handle_aassign(pTHX)
         firstlelem++;
     }
     fprintf(out, ", ...%"IVdf, lastrelem - firstrelem + 1);
-
-    run_original_op(PL_op->op_type);
-}
-
-static OP *
-pp_stmt_handle_simple(pTHX)
-{
-    dSP; sMARK;
-    output_op_leader();
-    run_original_op(PL_op->op_type);
 }
 
 static OP*
@@ -682,7 +643,10 @@ pp_stmt_dispatcher(pTHX)
     if (!active)
         return CALL_FPTR(PL_ppaddr_orig[PL_op->op_type])(aTHX);
 
-    return CALL_FPTR(PL_ppaddr_mine[PL_op->op_type])(aTHX);
+    output_op_leader();
+    if (PL_ppaddr_mine[PL_op->op_type])
+        CALL_FPTR(PL_ppaddr_mine[PL_op->op_type])(aTHX);
+    run_original_op(PL_op->op_type);
 }
 
 static int
@@ -711,12 +675,8 @@ init_handler(pTHX)
     PL_ppaddr_mine[OP_SPLICE]     = pp_stmt_handle_splice;
 
     for( i = 0; i < OP_max; i++ ) {
-        if ( handle_ops[i] != 0 ) {
-            if ( !PL_ppaddr_mine[handle_ops[i]] )
-                PL_ppaddr_mine[handle_ops[i]] = pp_stmt_handle_simple;
-
+        if ( handle_ops[i] != 0 )
             PL_ppaddr[handle_ops[i]] = pp_stmt_dispatcher;
-        }
     }
 
     out = open_report_file();
