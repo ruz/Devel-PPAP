@@ -1274,8 +1274,6 @@ sub create_database {
         { AutoCommit => 0 }
     ) or die "Couldn't create DB";
 
-    $dbh->do('PRAGMA synchronous = 0');
-
     $dbh->do( <<END ) or die $dbh->errstr;
 CREATE TABLE calls(
     id integer not null,
@@ -1314,10 +1312,15 @@ sub connect_database {
     my $name = 'ppap.db';
     return unless -e $name;
 
-    return $dbh = DBI->connect(
+    $dbh = DBI->connect(
         'dbi:SQLite:'. $name, undef, undef,
         { AutoCommit => 0, RaiseError => 1, }
     ) or die "Couldn't open DB";
+
+    $dbh->do('PRAGMA synchronous = OFF');
+    $dbh->do('PRAGMA cache_size = 20000');
+    return $dbh;
+
 } }
 
 BEGIN { $SIG{'INT'} = sub { require Carp; print STDERR Carp::longmess('Killed'); exit 1 }; }
