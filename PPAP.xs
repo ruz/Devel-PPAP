@@ -6,6 +6,7 @@
 
 typedef OP * (CPERLscope(*orig_ppaddr_t))(pTHX);
 orig_ppaddr_t *PL_ppaddr_orig;
+orig_ppaddr_t *PL_ppaddr_mine;
 #define run_original_op(type) STMT_START { \
     OP* rv; long elapsed, overflow; \
     get_time_of_day(start_time); \
@@ -398,6 +399,7 @@ static const int const handle_ops[OP_max] = {
 };
 
 FILE* out;
+bool active = FALSE;
 
 FILE*
 open_report_file()
@@ -674,6 +676,15 @@ pp_stmt_handle_simple(pTHX)
     run_original_op(PL_op->op_type);
 }
 
+static OP*
+pp_stmt_dispatcher(pTHX)
+{
+    if (!active)
+        return CALL_FPTR(PL_ppaddr_orig[PL_op->op_type])(aTHX);
+
+    return CALL_FPTR(PL_ppaddr_mine[PL_op->op_type])(aTHX);
+}
+
 static int
 init_handler(pTHX)
 {
@@ -681,28 +692,47 @@ init_handler(pTHX)
     Newxc(PL_ppaddr_orig, OP_max, void *, orig_ppaddr_t);
     Copy(PL_ppaddr, PL_ppaddr_orig, OP_max, void *);
 
-    PL_ppaddr[OP_AASSIGN]    = pp_stmt_handle_aassign;
-    PL_ppaddr[OP_AELEM]      = pp_stmt_handle_aelem;
-    PL_ppaddr[OP_AELEMFAST]  = pp_stmt_handle_aelemfast;
+    Newxc(PL_ppaddr_mine, OP_max, void *, orig_ppaddr_t);
+    Zero(PL_ppaddr_mine, OP_max, void *);
 
-    PL_ppaddr[OP_METHOD]     = pp_stmt_handle_method;
-    PL_ppaddr[OP_METHOD_NAMED]     = pp_stmt_handle_method_named;
+    PL_ppaddr_mine[OP_AASSIGN]    = pp_stmt_handle_aassign;
+    PL_ppaddr_mine[OP_AELEM]      = pp_stmt_handle_aelem;
+    PL_ppaddr_mine[OP_AELEMFAST]  = pp_stmt_handle_aelemfast;
 
-    PL_ppaddr[OP_POP]        = pp_stmt_handle_shift;
-    PL_ppaddr[OP_PUSH]       = pp_stmt_handle_push;
-    PL_ppaddr[OP_SHIFT]      = pp_stmt_handle_shift;
-    PL_ppaddr[OP_UNSHIFT]    = pp_stmt_handle_unshift;
-//    PL_ppaddr[OP_SUBSTR]     = pp_stmt_handle_substr;
+    PL_ppaddr_mine[OP_METHOD]     = pp_stmt_handle_method;
+    PL_ppaddr_mine[OP_METHOD_NAMED]     = pp_stmt_handle_method_named;
 
-    PL_ppaddr[OP_SPLICE]     = pp_stmt_handle_splice;
+    PL_ppaddr_mine[OP_POP]        = pp_stmt_handle_shift;
+    PL_ppaddr_mine[OP_PUSH]       = pp_stmt_handle_push;
+    PL_ppaddr_mine[OP_SHIFT]      = pp_stmt_handle_shift;
+    PL_ppaddr_mine[OP_UNSHIFT]    = pp_stmt_handle_unshift;
+//    PL_ppaddr_mine[OP_SUBSTR]     = pp_stmt_handle_substr;
+
+    PL_ppaddr_mine[OP_SPLICE]     = pp_stmt_handle_splice;
 
     for( i = 0; i < OP_max; i++ ) {
-        if ( handle_ops[i] != 0 && PL_ppaddr[handle_ops[i]] == PL_ppaddr_orig[handle_ops[i]] )
-            PL_ppaddr[handle_ops[i]] = pp_stmt_handle_simple;
+        if ( handle_ops[i] != 0 ) {
+            if ( !PL_ppaddr_mine[handle_ops[i]] )
+                PL_ppaddr_mine[handle_ops[i]] = pp_stmt_handle_simple;
+
+            PL_ppaddr[handle_ops[i]] = pp_stmt_dispatcher;
+        }
     }
 
     out = open_report_file();
 }
+
+static int
+start()
+{
+    active = TRUE;
+}
+static int
+stop()
+{
+    active = FALSE;
+}
+
 
 MODULE = Devel::PPAP   PACKAGE = Devel::PPAP
 
@@ -713,4 +743,9 @@ init_handler()
     C_ARGS:
     aTHX
 
+int
+start()
+
+int
+stop()
 

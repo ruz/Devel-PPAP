@@ -67,6 +67,33 @@ an array with more than 1000 elements is used in executed code.
 =cut
 
 init_handler();
+__PACKAGE__->import(
+    map( { my ($k, $v) = split(/=/, $_, 2); ($k, $v) } split /,/, $ENV{PPAP} ),
+    env => 1,
+) if $ENV{PPAP};
+
+our %opt;
+our %default = (
+    start => undef,
+);
+sub import {
+    my $self = shift;
+    my %args = @_;
+    if ( delete $args{'env'} ) {
+        @opt{ keys %args } = values %args;
+        return;
+    } else {
+        $opt{$_} = $args{$_} foreach grep !exists $opt{$_}, keys %args;
+    }
+    $opt{$_} = $default{$_} foreach grep !exists $opt{$_}, keys %default;
+
+    unless ( $opt{start} ) {
+        start();
+    } elsif ( $opt{'start'} eq 'no' ) {
+    } else {
+        die "Unknow start value '$opt{start}'";
+    }
+}
 
 =head1 TODO
 
