@@ -8,19 +8,20 @@ typedef OP * (CPERLscope(*orig_ppaddr_t))(pTHX);
 typedef void (CPERLscope(*void_ppaddr_t))(pTHX);
 orig_ppaddr_t *PL_ppaddr_orig;
 void_ppaddr_t *PL_ppaddr_mine;
+
 #define run_original_op(type) STMT_START { \
     OP* rv; long elapsed, overflow; \
+    fprintf(out, "{", elapsed); \
     get_time_of_day(start_time); \
     rv = CALL_FPTR(PL_ppaddr_orig[type])(aTHX); \
     get_time_of_day(end_time); \
     get_ticks_between(start_time, end_time, elapsed, overflow); \
-    fprintf(out, " |%"IVdf"\n", elapsed); \
+    fprintf(out, "}=%"IVdf"\n", elapsed); \
     return rv; \
 } STMT_END
 
 /* sMARK like dMARK, but doesn't change anything */
 #define sMARK register SV **mark = PL_stack_base + TOPMARK
-
 
 static const int const handle_ops[OP_max] = {
         OP_NULL         ,

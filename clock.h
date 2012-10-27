@@ -38,20 +38,20 @@ typedef uint64_t time_of_day_t;
 
 #ifdef HAS_GETTIMEOFDAY
 typedef struct timeval time_of_day_t;
-#  define CLOCKS_PER_TICK 1000000                 /* 1 million */
+#  define CLOCKS_PER_TICK 10000000                 /* 1 million */
 #  define get_time_of_day(into) gettimeofday(&into, NULL)
 #  define get_ticks_between(s, e, ticks, overflow) STMT_START { \
     overflow = 0; \
-    ticks = ((e.tv_sec - s.tv_sec) * CLOCKS_PER_TICK + e.tv_usec - s.tv_usec); \
+    ticks = ((e.tv_sec - s.tv_sec) * CLOCKS_PER_TICK + (e.tv_usec - s.tv_usec)*10); \
 } STMT_END
 #else
 static int (*u2time)(pTHX_ UV *) = 0;
 typedef UV time_of_day_t[2];
-#  define CLOCKS_PER_TICK 1000000                 /* 1 million */
+#  define CLOCKS_PER_TICK 10000000                 /* 1 million */
 #  define get_time_of_day(into) (*u2time)(aTHX_ into)
 #  define get_ticks_between(s, e, ticks, overflow)  STMT_START { \
     overflow = 0; \
-    ticks = ((e[0] - s[0]) * CLOCKS_PER_TICK + e[1] - s[1]); \
+    ticks = ((e[0] - s[0]) * CLOCKS_PER_TICK + (e[1] - s[1])*10); \
 } STMT_END
 #endif
 #endif
