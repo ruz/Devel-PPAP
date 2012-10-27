@@ -4,6 +4,7 @@ use 5.016;
 use strict;
 use warnings;
 use autodie;
+use utf8;
 
 use File::Spec;
 use File::ShareDir qw(dist_dir);
@@ -894,7 +895,8 @@ sub render_table {
 
     {
         my @totals = ();
-        open my $fh, '>>', \$res;
+        use Encode; Encode::_utf8_on($res);
+        open my $fh, '>>:utf8', \$res;
         foreach my $row ( @{ $args{'elements'} } ) {
             render_table_row( $fh, $row, %args, totals => \@totals );
         }
@@ -902,16 +904,33 @@ sub render_table {
         $res .= "</tbody>\n";
 
         $res .= "<tfoot>\n";
-        open $fh, '>>', \$res;
+        open $fh, '>>:utf8', \$res;
         render_table_row( $fh, \@totals, %args );
         close $fh;
         $res .= "</tfoot>\n";
-
     }
 
     $res .= "</table>\n\n";
 
     print $out $res;
+}
+
+sub convert_time {
+    my $val = shift or return "0"; # nano
+
+    if ( $val > 1 ) {
+        my @unit = ('n','μ','m','','k','M','G','T');
+        while ($val > 1000 && @unit > 1) {
+            $val /= 1000; shift @unit;
+        }
+        return sprintf "%0.3f %ss", $val, shift @unit;
+    } else {
+        my @unit = ('n','p','f','a','z','y');
+        while ($val < 1 && @unit > 1) {
+            $val *= 1000; shift @unit;
+        }
+        return sprintf "%0.3f %ss", $val, shift @unit;
+    }
 }
 
 sub render_table_row {
@@ -940,7 +959,7 @@ sub render_table_row {
             $args{'totals'}[$i] += $row->[$i] if $args{'totals'};
         }
         elsif ( $type eq 'time' ) {
-            $res .= sprintf '<td class="number">%0.3f us</td>', $row->[$i]/10;
+            $res .= sprintf '<td class="number">%s</td>', convert_time( $row->[$i]*100 );
             $args{'totals'}[$i] += $row->[$i] if $args{'totals'};
         }
         else {
