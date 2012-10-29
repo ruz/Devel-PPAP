@@ -375,8 +375,6 @@ sub report {
     out_head($fh, 'PP op codes access patterns');
     out_groupped_usage($fh, \%results);
     out_pp_usage($fh, \%results);
-#    out_variable_arguments($fh);
-#    out_arrays_arguments($fh);
     out_footer($fh);
     close $fh;
 
@@ -444,16 +442,13 @@ sub out_groupped_usage {
         $out,
         title => 'Groupped PPs usage',
         elements => [ sort keys %grps ],
-        columns  => [qw(Group count % time %)],
-        type     => [qw(string counter percent time percent)],
+        columns  => [qw(Group count time)],
+        type     => [qw(string counter time)],
         callback => sub {
             my $group = shift;
-            return [
-                $group, 
-                $grps{$group}{'count'}, (100*$grps{$group}{'count'})/$tcount,
-                $grps{$group}{'time'}, (100*$grps{$group}{'time'})/$ttime,
-            ];
-        }
+            return [ $group, $grps{$group}{'count'}, $grps{$group}{'time'} ];
+        },
+        totals   => [undef, $tcount, $ttime],
     );
 }
 
@@ -501,20 +496,17 @@ sub out_pp_usage {
         $out,
         title => 'PPs usage',
         elements => [ sort keys %$results ],
-        columns  => [qw(PP group count % time % mean ratio)],
-        type     => [qw(string string counter percent time percent num num)],
+        columns  => [qw(PP group count time average)],
+        type     => [qw(string string counter time time)],
         callback => sub {
             my $op = shift;
-            my $count_perc = (100*$results->{$op}{'counter'})/$total;
-            my $time_perc = (100*$results->{$op}{'time'})/$ttime;
             return [
                 "<a href='pp/$op.html'>$op</a>", $OP_GROUP{uc $op} || 'other',
-                $results->{$op}{'counter'}, $count_perc,
-                $results->{$op}{'time'}, $time_perc,
+                $results->{$op}{'counter'}, $results->{$op}{'time'},
                 $results->{$op}{'time'}/$results->{$op}{'counter'},
-                ($time_perc/$count_perc),
             ];
         },
+        totals => [undef, undef, $total, $ttime],
     );
 }
 
@@ -533,23 +525,17 @@ sub out_pp_context {
         $out,
         title => 'Context',
         elements => [ sort keys %$stats ],
-        columns  => [qw(context count % time % mean ratio)],
-        type     => [qw(string counter percent time percent num num)],
+        columns  => [qw(context count time average)],
+        type     => [qw(string counter time time)],
         callback => sub {
             my $ctx = shift;
-            my $count_perc = (100*$stats->{$ctx}{'counter'})/$results{$op}{'counter'};
-            my $time_perc = $results{$op}{'time'}
-                ? (100*$stats->{$ctx}{'time'})/$results{$op}{'time'}
-                : 0
-            ;
             return [
                 $ctx,
-                $stats->{$ctx}{'counter'}, $count_perc,
-                $stats->{$ctx}{'time'}, $time_perc,
+                $stats->{$ctx}{'counter'}, $stats->{$ctx}{'time'},
                 $stats->{$ctx}{'time'}/$stats->{$ctx}{'counter'},
-                ($time_perc/$count_perc),
             ];
         },
+        totals => [undef,$results{$op}{'counter'}, $results{$op}{'time'}],
     );
 }
 
@@ -582,18 +568,14 @@ sub out_substr_arg_count {
         $out,
         title => 'Substr argument count',
         elements => [ sort keys %{ $stats{'counter'} } ],
-        columns  => [qw(type count % time % mean ratio)],
-        type     => [qw(string counter percent time percent num num)],
+        columns  => [qw(type count time average)],
+        type     => [qw(string counter time time)],
         callback => sub {
             my $ctx = shift;
-            my $count_perc = (100*$stats{'counter'}{$ctx})/$results{$op}{'counter'};
-            my $time_perc = (100*$stats{'time'}{$ctx})/$results{$op}{'time'};
             return [
                 $ctx,
-                $stats{'counter'}{$ctx}, $count_perc,
-                $stats{'time'}{$ctx}, $time_perc,
+                $stats{'counter'}{$ctx}, $stats{'time'}{$ctx},
                 $stats{'time'}{$ctx}/$stats{'counter'}{$ctx},
-                ($time_perc/$count_perc),
             ];
         },
     );
@@ -613,21 +595,21 @@ sub out_variable_arg_size {
         $out,
         title => 'Variable argument size',
         elements => [ sort keys %$stats ],
-        columns  => [qw(size count % time % mean mean/elements ratio)],
-        type     => [qw(counter counter percent time percent num num num)],
+        columns  => [qw(size count time average elements average/element)],
+        type     => [qw(counter counter time time counter time)],
         callback => sub {
             my $ctx = shift;
-            my $count_perc = (100*$stats->{$ctx}{'counter'})/$results{$op}{'counter'};
-            my $time_perc = (100*$stats->{$ctx}{'time'})/$results{$op}{'time'};
+            my $average = $stats->{$ctx}{'time'}/$stats->{$ctx}{'counter'};
             return [
                 $ctx,
-                $stats->{$ctx}{'counter'}, $count_perc,
-                $stats->{$ctx}{'time'}, $time_perc,
-                $stats->{$ctx}{'time'}/$stats->{$ctx}{'counter'},
-                $ctx? $stats->{$ctx}{'time'}/$stats->{$ctx}{'counter'}/$ctx : 0.0,
-                ($time_perc/$count_perc),
+                $stats->{$ctx}{'counter'}, $stats->{$ctx}{'time'}, $average,
+                $ctx
+                    ?( $stats->{$ctx}{'counter'}*$ctx, $average/$ctx)
+                    :(0,0.0)
+                ,
             ];
         },
+        totals => [undef, $results{$op}{'counter'}, $results{$op}{'time'}],
     );
 }
 
@@ -657,8 +639,8 @@ sub out_lhs_arg_type_size {
         $out,
         title => 'Left hand side arguments',
         elements => [ sort keys %$stats ],
-        columns  => [qw(signature count % time % mean elements mean/elements)],
-        type     => [qw(string counter percent time percent num counter num)],
+        columns  => [qw(signature count time average elements average/elements)],
+        type     => [qw(string counter time time counter time)],
         callback => sub {
             my $ctx = shift;
             my $line = $stats->{ $ctx };
@@ -672,6 +654,7 @@ sub out_lhs_arg_type_size {
                 $line->{'elements'}, $line->{'elements'}? $line->{'time'}/$line->{'elements'} : '-',
             ];
         },
+        totals => [undef, $results{$op}{'counter'}, $results{$op}{'time'}],
     );
 }
 
@@ -689,8 +672,8 @@ sub out_arguments {
         $out,
         title => 'Argument(s)',
         elements => [ sort keys %$stats ],
-        columns  => [qw(value count % time % mean)],
-        type     => [qw(string counter percent time percent num)],
+        columns  => [qw(value count time average)],
+        type     => [qw(string counter time time)],
         callback => sub {
             my $ctx = shift;
             my $line = $stats->{ $ctx };
@@ -703,6 +686,7 @@ sub out_arguments {
                 ($time_perc/$count_perc),
             ];
         },
+        totals => [undef, $results{$op}{'counter'}, $results{$op}{'time'}],
     );
 }
 
@@ -759,20 +743,18 @@ END
         $out,
         title => 'Suffix size',
         elements => ['no argument', 'empty array', 'suffix fits', 'prefix+suffix fits', 'no space' ],
-        columns  => [qw(status count % time % mean mean/elements ratio)],
-        type     => [qw(string counter percent time percent num num num)],
+        columns  => [qw(status count time average average/element)],
+        type     => [qw(string counter time time time)],
         callback => sub {
             my $ctx = shift;
             return [ $ctx, ('')x7 ] unless $stats{$ctx}{'counter'};
-            my $count_perc = (100*$stats{$ctx}{'counter'})/$results{$op}{'counter'};
-            my $time_perc = (100*$stats{$ctx}{'time'})/$results{$op}{'time'};
+            my $average = $stats{$ctx}{'time'}/$stats{$ctx}{'counter'};
             return [
                 $ctx,
-                $stats{$ctx}{'counter'}, $count_perc,
-                $stats{$ctx}{'time'}, $time_perc,
-                $stats{$ctx}{'time'}/$stats{$ctx}{'counter'},
-                $stats{$ctx}{'size'}? $stats{$ctx}{'time'}/$stats{$ctx}{'counter'}/$stats{$ctx}{'size'} : 0.0,
-                ($time_perc/$count_perc),
+                $stats{$ctx}{'counter'}, $stats{$ctx}{'time'}, $average,
+                $stats{$ctx}{'size'}
+                    ? $average/$stats{$ctx}{'size'}
+                    : 0.0,
             ];
         },
     );
@@ -878,34 +860,54 @@ sub render_table {
     if ( $args{'title'} ) {
         $res .= "<h1>$args{'title'}</h1>\n";
     }
-    $res .= '<table class="sortable">'. "\n";
-    $res .= "<thead><tr>". join('', map "<th>$_</th>", @{ $args{'columns'} }) ."</tr></thead>\n";
+    $res .= '<table class="sortable"';
+    unless ( $args{'sort'} ) {
+        foreach my $name (qw(time counter)) {
+            next unless grep $name eq $_, @{ $args{'columns'} };
+            $args{'sort'} = $name;
+            last;
+        }
+        $args{'sort'} ||= $args{columns}[0];
+    }
+    foreach my $i ( 0 .. @{ $args{'columns'} }-1 ) {
+        my ($name, $type) = ($args{'columns'}[$i], $args{'type'}[$i]);
+        next unless $name eq $args{'sort'};
+        my $order = $type eq 'string'? '0': '1';
+        $res .= qq{ data-sortlist="[[$i,$order]]"};
+    }
+
+    $res .= ">\n";
+    $res .= "<thead><tr>";
+    foreach my $i ( 0 .. @{ $args{'columns'} }-1 ) {
+        my ($name, $type) = ($args{'columns'}[$i], $args{'type'}[$i]);
+        if ( $type eq 'string' ) {
+            $res .= '<th>';
+        } else {
+            $res .= '<th data-sort-initial-order="desc">';
+        }
+        $res .= $name;
+        $res .= '</th>';
+    }
+    $res .= "</tr></thead>\n";
 
     foreach my $e ( @{ $args{'elements'} } ) {
         $e = $args{'callback'}->( $e );
     }
 
-    if ( $args{'sort'} ) {
-        # ...
-    }
-
-    my @totals;
-
     $res .= "<tbody>\n";
 
     {
-        my @totals = ();
         use Encode; Encode::_utf8_on($res);
         open my $fh, '>>:utf8', \$res;
         foreach my $row ( @{ $args{'elements'} } ) {
-            render_table_row( $fh, $row, %args, totals => \@totals );
+            render_table_row( $fh, $row, %args );
         }
         close $fh;
         $res .= "</tbody>\n";
 
         $res .= "<tfoot>\n";
         open $fh, '>>:utf8', \$res;
-        render_table_row( $fh, \@totals, %args );
+        render_table_foot_row( $fh, $args{'totals'}, %args );
         close $fh;
         $res .= "</tfoot>\n";
     }
@@ -915,7 +917,7 @@ sub render_table {
     print $out $res;
 }
 
-sub convert_time {
+sub friendly_time {
     my $val = shift or return "0"; # nano
 
     if ( $val > 1 ) {
@@ -933,38 +935,86 @@ sub convert_time {
     }
 }
 
+sub friendly_counter {
+    my $val = shift or return "0"; # nano
+
+    my @unit = ('','k','M','G','T');
+    while ($val >= 100000 && @unit > 1) {
+        $val /= 1000; shift @unit;
+    }
+    return sprintf "%d%s", $val, shift @unit;
+}
+
+sub friendly_value {
+    my ($type, $val) = @_;
+
+    if ( $type eq 'string' ) {
+        return $val
+    }
+    elsif ( $type eq 'counter' ) {
+        return friendly_counter($val);
+    }
+    elsif ( $type eq 'number' ) {
+        return sprintf '%0.3f', $val;
+    }
+    elsif ( $type eq 'time' ) {
+        return friendly_time( $val*100 );
+    }
+    die "boo: $type";
+}
+
 sub render_table_row {
     my ($out, $row, %args) = @_;
 
     my $res = "<tr>";
     foreach my $i ( 0 .. @{ $args{'columns'} }-1 ) {
-        unless ( defined $row->[$i] && length $row->[$i] ) {
-            $res .= '<td>&nbsp;</td>';
-            next;
+        my ($val, $type) = ($row->[$i], $args{'type'}[$i]);
+        $val = '' unless defined $val;
+
+        $res .= sprintf '<td class="%s">', $type;
+        $res .= sprintf '<span class="raw hidden">%s</span>', $val;
+        unless ( length $val ) {
+            $res .= '&nbsp;'.'</td>'; next;
+        }
+        if ( $type eq 'string' ) {
+            $res .= $val .'</td>'; next;
         }
 
-        my $type = $args{'type'}[$i];
+        my $fval = friendly_value( $type => $val );
+        if ( my $total = $args{'totals'}[$i] ) {
+            my $alt = 100*$val/$args{'totals'}[$i];
+            my $falt = sprintf '%0.2f%%', $alt;
+            $res .= qq{<span class="value" title="$falt">$fval</span>};
+            $res .= qq{ <small class="alt muted" title="$fval">($falt)</small>};
+        } else {
+            $res .= qq{<span class="value">$fval</span>};
+        }
+
+    }
+    $res .= "</tr>\n";
+
+    print $out $res;
+}
+
+sub render_table_foot_row {
+    my ($out, $row, %args) = @_;
+
+    my $res = "<tr>";
+    foreach my $i ( 0 .. @{ $args{'columns'} }-1 ) {
+        my ($val, $type) = ($row->[$i], $args{'type'}[$i]);
+        $val = '' unless defined $val;
+
+        $res .= sprintf '<td class="%s">', $type;
+        $res .= sprintf '<span class="raw hidden">%s</span>', $val;
+        unless ( length $val ) {
+            $res .= '&nbsp;'.'</td>'; next;
+        }
         if ( $type eq 'string' ) {
-            $res .= '<td>'. $row->[$i] .'</td>';
+            $res .= $val .'</td>'; next;
         }
-        elsif ( $type eq 'percent' ) {
-            $res .= sprintf '<td class="number">%0.2f</td>', $row->[$i];
-        }
-        elsif ( $type eq 'counter' ) {
-            $res .= sprintf '<td class="number">%d</td>', $row->[$i];
-            $args{'totals'}[$i] += $row->[$i] if $args{'totals'};
-        }
-        elsif ( $type eq 'num' ) {
-            $res .= sprintf '<td class="number">%0.3f</td>', $row->[$i];
-            $args{'totals'}[$i] += $row->[$i] if $args{'totals'};
-        }
-        elsif ( $type eq 'time' ) {
-            $res .= sprintf '<td class="number">%s</td>', convert_time( $row->[$i]*100 );
-            $args{'totals'}[$i] += $row->[$i] if $args{'totals'};
-        }
-        else {
-            die "boo: $type";
-        }
+
+        my $fval = friendly_value( $type => $val );
+        $res .= qq{<span class="value">$fval</span>};
     }
     $res .= "</tr>\n";
 
@@ -1012,142 +1062,6 @@ sub out_context {
     $res .= "</table>\n";
 
     print $out $res;
-}
-
-sub out_variable_arguments {
-    my $out = shift;
-
-    my %stats;
-    my %total_per_op;
-    my %total_per_len;
-
-    print $out "<h1>Varying arguments</h1>\n";
-    walk_report( sub {
-        my ($ctx,$lval,$op,$args) = @_;
-        return unless rindex($args, '...') >= 0;
-        my ($l) = ($args =~ /\.\.\.([0-9]+)/);
-        $stats{$op}{$l}++;
-        $total_per_len{$l}++;
-        $total_per_op{$op}++;
-    } );
-
-    my $show_first = 5;
-
-    my $res = '';
-    $res .= "<h2>Most used lengths</h2>\n";
-    $res .= "<table>\n<tr><th>PP</th>". join( '', map "<th>$_</th>", 1 .. $show_first ) ."</tr>\n";
-    foreach my $op ( sort keys %stats ) {
-        $res .= "<tr><th>$op</th>";
-        my $found = 0;
-        foreach my $len (
-            sort { $stats{$op}{$b} <=> $stats{$op}{$a} }
-            keys %{ $stats{$op} }
-        ) {
-            $found++;
-
-            $res .= sprintf
-                "<td>%d <sup>%0.2f%%</sup></td>",
-                $len, (100*$stats{$op}{$len})/$total_per_op{$op},
-            ;
-
-            last if $found == $show_first;
-        }
-        $res .= join '', map "<td>-</td>", 1 .. $show_first-$found
-            if $found < $show_first;
-        $res .= "</tr>\n";
-    }
-    {
-        my $total = 0;
-        $total += $_ foreach values %total_per_len;
-
-        $res .= "<tr><th>Total:</th>";
-        my $found = 0;
-        foreach my $len (
-            sort { $total_per_len{$b} <=> $total_per_len{$a} }
-            keys %total_per_len
-        ) {
-            $found++;
-
-            $res .= sprintf
-                "<td>%d <sup>%0.2f%%</sup></td>",
-                $len, (100*$total_per_len{$len})/$total,
-            ;
-
-            last if $found == $show_first;
-        }
-        $res .= join '', map "<td>-</td>", 1 .. $show_first-$found
-            if $found < $show_first;
-        $res .= "</tr>\n";
-
-    }
-    $res .= "</table>\n";
-    print $out $res;
-    $res = '';
-
-    
-    my @fractiles = fractiles();
-    $res .= "<h2>Fractiles</h2>\n";
-    $res .= "<table>\n<tr><th>PP</th>". join( '', map "<th>$_%</th>", @fractiles ) ."</tr>\n";
-    foreach my $op ( sort keys %stats ) {
-        my $fractiles = calc_fractiles( $stats{$op}, $total_per_op{$op} );
-        $res .= "<tr><th>$op</th>";
-        foreach my $f ( @fractiles ) {
-            $res .= exists $fractiles->{ $f }
-                ? sprintf("<td>%0d</td>", $fractiles->{ $f })
-                : "<td>-</td>"
-            ;
-        }
-        $res .= "</tr>\n";
-    }
-    $res .= "</table>\n";
-    print $out $res;
-    $res = '';
-}
-
-sub out_arrays_arguments {
-    my $out = shift;
-
-    my %stats;
-    my %total_per_len;
-
-    print $out "<h1>Array arguments</h1>\n";
-
-    walk_report( sub {
-        my ($ctx,$lval,$op,$args) = @_;
-        return unless rindex($args, '@') >= 0;
-        my ($prefix, $length, $sufix) = ($args =~ /@\_?\([^\)]+\)([0-9]+)-([0-9]+)-([0-9]+)/);
-        next unless defined $prefix;
-        $stats{$op}{'prefix'}{$prefix}++;
-        $stats{$op}{'length'}{$length}++;
-        $stats{$op}{'sufix'}{$sufix}++;
-        $total_per_len{'prefix'}{$prefix}++;
-        $total_per_len{'length'}{$length}++;
-        $total_per_len{'sufix'}{$sufix}++;
-    } );
-
-    my $res = '';
-
-    my @fractiles = fractiles();
-    $res .= "<h2>Fractiles</h2>\n";
-    $res .= "<table>\n<tr><th>PP</th><th></th>". join( '', map "<th>$_%</th>", @fractiles ) ."</tr>\n";
-    foreach my $op ( sort keys %stats ) {
-        $res .= "<tr><th rowspan='3'>$op</th>";
-        foreach my $e ( qw(prefix length sufix) ) {
-            $res .= "<tr>" if $e ne 'prefix';
-            my $fractiles = calc_fractiles( $stats{$op}{$e} );
-            $res .= "<th>$e</th>";
-            foreach my $f ( @fractiles ) {
-                $res .= exists $fractiles->{ $f }
-                    ? sprintf("<td>%0d</td>", $fractiles->{ $f })
-                    : "<td>-</td>"
-                ;
-            }
-            $res .= "</tr>\n";
-        }
-    }
-    $res .= "</table>\n";
-    print $out $res;
-    $res = '';
 }
 
 sub fractiles {
@@ -1200,18 +1114,24 @@ sub out_head {
     my $prefix = shift || '';
 
     print $out <<"END_HEADER";
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
+<meta charset="UTF-8">
 <title>$title</title>
+<link rel="stylesheet" href="${prefix}css/bootstrap.min.css" type="text/css" media="all" />
+<link rel="stylesheet" href="${prefix}css/tablesorter.css" type="text/css" media="all" />
 <link rel="stylesheet" href="${prefix}css/main.css" type="text/css" media="all" />
 <script type="text/javascript" src="${prefix}js/jquery.min.js"></script>
 <script type="text/javascript" src="${prefix}js/jquery.tablesorter.min.js"></script>
+<script type="text/javascript" src="${prefix}js/jquery.tablesorter.widgets.min.js"></script>
 <!--[if IE]><script language="javascript" type="text/javascript" src="${prefix}js/excanvas.min.js"></script><![endif]-->
 <script type="text/javascript" src="${prefix}js/jquery.flot.min.js"></script>
 <script type="text/javascript" src="${prefix}js/ppap.js"></script>
 </head>
 <body>
+<div class="container-fluid"><div class="row-fluid">
+
 END_HEADER
 
 }
@@ -1219,12 +1139,12 @@ END_HEADER
 # Вывод футера
 sub out_footer {
     my $out = shift;
-    print $out "</body></html>\n";
+    print $out "</div></div></body></html>\n";
 }
 
 # Создание каталога с HTML-отчетом
 sub prepare_report_dir {
-    foreach my $n (qw(css js)) {
+    foreach my $n (qw(css js img)) {
         my $src = File::Spec->catfile( dist_dir('Devel-PPAP'), $n, '*' );
         print "$src\n";
         my $dst = File::Spec->catdir('ppap', $n);

@@ -1,97 +1,90 @@
-var current_index;
+var current_index = -1;
 
-$.tablesorter.addWidget({ 
-    // give the widget a id 
-    id: "color", 
-    // format is called when the on init and when a sorting has finished 
+$.tablesorter.addWidget({
+    // give the widget a id
+    id: "color",
+    // format is called when the on init and when a sorting has finished
     format: function(table) {
-	var vals = []; 
-	var allvals = 0;
-	var order = '';
-    var ascSort = "." + table.config.cssAsc;
-    var descSort = "." + table.config.cssDesc;    
-    $(ascSort).add(descSort).each(function() {
-    $("tr:visible", table.tBodies[0]).find("td:nth-child(" + ($("thead th", table).index(this) + 1) + ")").each(function() {
-	if ($("thead th", table).hasClass(table.config.cssAsc))
-	{
-		order ='asc';
-	} else
-	{
-		order = 'desc';
-	}
-    var txt = $(this).text();
-	txt = txt.replace(/^([0-9\.]+?)\s+(.+?)$/, '$1');
-	txt = parseFloat(txt);
-	allvals += txt;
-	vals.push(txt);
-    });
-    
-    });
-    vals = vals.sort( function(a,b) { return a - b; } );
-	var maxval = vals[vals.length-1];
-    var minval = vals[0];
-    
-    // * median and std.deviation math *
-    var mean = allvals / vals.length;
-    var med_idx = Math.round(vals.length / 2);
-    var med_value = vals[med_idx];
-	var variance = 0;
-    for(var j=0; j < vals.length; j++)
-    {
-        variance = variance + Math.pow(vals[j] - mean,2);
-    }
-    variance = variance / vals.length;
-    var std_dev = Math.sqrt(variance);
-    // 
+        if (!table.config.sortList.length)
+            return;
+        if ( current_index == table.config.sortList[0][0] )
+            return;
 
-    //simple
-    //var threshold_1 = (allvals/100)*30;
-    //var threshold_2 = (allvals/100)*80;
- 
-    var threshold_1 = std_dev;
-    var threshold_2 = (maxval/100)*80;
-    	
-	var cval;
-        // loop all tr elements and insert a copy of the "headers"     
-        for(var i=0; i < table.tBodies[0].rows.length; i++) {
-			if (order == 'asc')
-			{
-				cval = vals[vals.length-1-i];	
-			}
-			else
-			{
-				cval = vals[i];
-			}
-			if (cval > threshold_2)
-			{
-			$("tbody tr:eq(" + i + ")",table).attr('style','background: #e32636');
-			}
-			else if (cval > threshold_1)
-			{
-			$("tbody tr:eq(" + i + ")",table).attr('style','background: #FFFF00');
-			}
-			else
-			{
-			$("tbody tr:eq(" + i + ")",table).attr('style','background: #FFFFFF');	
-			}
-        } 
+        current_index = table.config.sortList[0][0];
+        $('tr.warning,tr.error', table)
+            .removeClass('warning').removeClass('error');
+        if ( !ppapIsNumeric(ppapTextExtraction(
+            $('tbody tr:first td:eq('+current_index+')', table).get(0)
+        )))
+            return;
 
+        var order = table.config.sortList[0][1];
+
+        var vals = [];
+        var sum = 0;
+        $("tbody tr", table).each(function() {
+            var val = parseFloat(ppapTextExtraction(
+                $("td:eq("+current_index+')', this).get(0)
+            ));
+            sum += val;
+            vals.push(val);
+        });
+        var maxval = Math.max.apply(Math, vals);
+        var minval = Math.min.apply(Math, vals);
+
+        // * median and std.deviation math *
+        var mean = sum / vals.length;
+        var variance = 0;
+        for(var j=0; j < vals.length; j++) {
+            variance += Math.pow(vals[j] - mean,2);
         }
-    });  
+        variance /= vals.length;
+        var std_dev = Math.sqrt(variance);
 
+        var threshold_1 = std_dev;
+        var threshold_2 = (maxval/100)*80;
 
-$(document).ready(function() 
-    { 
-        //$("table.sortable").tablesorter( {textExtraction: ppapTextExtraction} ); 
-        $("table.sortable").tablesorter( {textExtraction: ppapTextExtraction, widgets: ['color']} ); 
-    } 
-);
+        $("tbody tr",table).each(function(){
+            var val = parseFloat(ppapTextExtraction(
+                $("td:eq("+current_index+')', this).get(0)
+            ));
+            if (val > threshold_2)
+                $(this).addClass('error');
+            else if (val > threshold_1)
+                $(this).addClass('warning');
+        });
+    }
+});
 
-var ppapTextExtraction = function(node)  
-{  
-    // extract data from markup and return it  
-   var html = node.innerHTML;
-   html = html.replace(/^([0-9\.]+?)\s+(.+?)$/, '$1');
-   html = html.replace(/^<a href(.+?)>(.+?)<\/a>$/, '$2');
-   return html; 
-} 
+var ppapTextExtraction = function(node)
+{
+    return node.childNodes[0].innerHTML;
+}
+var ppapIsNumeric = function(n)
+{
+    return !isNaN(parseFloat(n)) && isFinite(n);
+}
+
+$(function() {
+    $.extend($.tablesorter.themes.bootstrap, {
+        table    : 'table table-bordered table-condensed',
+        header   : 'bootstrap-header',
+        icons    : '',
+        sortNone : 'bootstrap-icon-unsorted', 
+        sortAsc  : 'icon-chevron-up', 
+        sortDesc : 'icon-chevron-down', 
+        active   : '', // applied when column is sorted 
+        hover    : '', // use custom css here - bootstrap class may not override it 
+        filterRow: '', // filter row class 
+        even     : '', // odd row zebra striping 
+        odd      : ''  // even row zebra striping 
+    });
+    $("table.sortable").tablesorter({
+        textExtraction: ppapTextExtraction,
+        widgets: ['color', 'uitheme'],
+        widgetOptions: {
+            uitheme: "bootstrap"
+        }
+    });
+} );
+

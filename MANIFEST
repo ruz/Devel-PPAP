@@ -1,4 +1,5 @@
 bin/ppap_html
+clock.h
 inc/Module/Install.pm
 inc/Module/Install/Base.pm
 inc/Module/Install/Can.pm
@@ -13,15 +14,19 @@ inc/Module/Install/WriteAll.pm
 lib/Devel/PPAP.pm
 Makefile.PL
 MANIFEST			This list of files
+MANIFEST.SKIP
 META.yml
 PPAP.xs
 README
-samples/ppap.out
 samples/shift_push_sequence.pl
 samples/unshift_sequence.pl
+share/css/bootstrap.min.css
 share/css/main.css
+share/css/tablesorter.css
+share/img/glyphicons-halflings.png
 share/js/excanvas.min.js
-share/js/jquery.min.js
 share/js/jquery.flot.min.js
+share/js/jquery.min.js
 share/js/jquery.tablesorter.min.js
+share/js/jquery.tablesorter.widgets.min.js
 share/js/ppap.js
